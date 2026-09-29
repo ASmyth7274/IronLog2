@@ -1,7 +1,7 @@
 /* IronLog service worker — rest-timer notifications + offline cache.
    Kept separate from index.html because browsers require service workers
    to be real same-origin JS files (no inline/blob registration). */
-const CACHE='ironlog-v3';   // bumped for v5.7 — drops the v5.6 precached shell
+const CACHE='ironlog-v4';   // bumped for v5.8 — drops the v5.7 precached shell
 // precached so a fresh install is installable and works offline immediately,
 // rather than only after the network-first handler has seen each request once
 const SHELL=['./','./index.html','./manifest.webmanifest','./icon-192.png',

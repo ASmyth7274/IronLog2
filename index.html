@@ -11,7 +11,7 @@
 <meta name="description" content="Offline workout tracker with PR tracking, strength scores, muscle recovery and cardio coaching. All data stays on your device.">
 <!-- theme-color follows the active theme so the iOS status bar and Android
      chrome match the app instead of flashing charcoal in light mode -->
-<meta name="theme-color" content="#0B0B0D" id="themecolor">
+<meta name="theme-color" content="#17181D" id="themecolor">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
@@ -113,7 +113,9 @@ header{
    permanently out-of-focus strip across the top. Painting the band in the exact
    colour the blur resolves to (--bgtop, which --hdr is 85% of) removes the
    double treatment with no visible seam, and stops page content from ghosting
-   through the status bar as it scrolls. The header bar below keeps its frost. */
+   through the status bar as it scrolls. The header bar below keeps its frost.
+   v5.8: iOS 27's colour sampler never sees a pseudo-element, so this band
+   alone could not stop its blur; #sbar is the real element it reads. */
 header::before{
   content:'';position:absolute;left:0;right:0;top:0;height:var(--sat);
   background:var(--bgtop);pointer-events:none;
@@ -236,6 +238,8 @@ hr{border:0;border-top:1px solid var(--line);margin:14px 0}
 .exname{font-size:17px;font-weight:800;color:var(--acc)}
 .exsub{font-size:12px;color:var(--dim);margin-top:1px}
 .note-pill{font-size:13px;color:var(--amb);background:rgba(245,182,46,.08);border-radius:9px;padding:6px 10px;margin-top:8px}
+.note-pill,.pin-note{display:flex;align-items:flex-start;gap:7px;line-height:1.4}
+.note-pill .ic,.pin-note .ic{margin-top:1px}
 .setgrid{margin-top:10px}
 .sethead,.setrow{display:grid;grid-template-columns:36px 74px 1fr 56px 44px 42px;gap:5px;align-items:center}
 .sethead{font-size:10.5px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;text-align:center;padding-bottom:4px}
@@ -494,7 +498,6 @@ body.light .prb-line b{color:#8A6D1F}
 .mech-read .k{font-size:9.5px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;margin-top:2px}
 .mech-tag{display:inline-block;font-size:10.5px;font-weight:800;letter-spacing:.3px;
   color:#8b5cf6;background:rgba(139,92,246,.14);border-radius:7px;padding:2px 7px;margin-left:6px}
-body.light .tgl{background:#DEDBD0}
 
 /* ==========================================================================
    v5.6: MOTION — everything that appears should arrive from somewhere.
@@ -601,13 +604,253 @@ input[type=time].in::-webkit-calendar-picker-indicator{
   opacity:.75;cursor:pointer;filter:invert(1);width:20px;height:20px}
 body.light input[type=date].in::-webkit-calendar-picker-indicator,
 body.light input[type=time].in::-webkit-calendar-picker-indicator{filter:none;opacity:.6}
+
+/* ==========================================================================
+   v5.8: DESIGN SYSTEM
+   The 5.7 screens gave every action the same loud inverse button, stacked
+   menus as walls of identical full-width buttons, headed cards with emoji
+   and explained themselves in long grey paragraphs. 5.8 keeps the editorial
+   identity (charcoal, gold, the serif accents) and adds hierarchy: ONE
+   inverse primary per screen, accent-tinted secondary actions, grouped
+   rows with a single stroke-icon family, explanations folded behind
+   "How this works", and rounded figures for the numbers read mid-set.
+   Layered after the older rules so every class the app — and tests.js —
+   relies on keeps working.
+   ========================================================================== */
+:root{
+  --tint:rgba(201,169,109,.13); --tint-2:rgba(201,169,109,.24);
+  --acc-ink:#16171B;                         /* text on a solid accent fill */
+  --glass:rgba(24,25,30,.82);
+  --data1:#C9A96D; --data1-fill:rgba(201,169,109,.16); --data2:#8DB4F2;
+  --grp-well:#141417;                        /* inputs sitting on a card2 group */
+  --track:rgba(120,120,128,.34);             /* an off switch, on any surface */
+  --rnd:ui-rounded,"SF Pro Rounded",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  --serif:ui-serif,'New York',Georgia,'Noto Serif',serif;
+}
+body.light{
+  --tint:rgba(138,106,48,.10); --tint-2:rgba(138,106,48,.20);
+  --acc-ink:#FFFFFF;
+  --glass:rgba(252,251,247,.88);
+  --data1:#8A6A30; --data1-fill:rgba(138,106,48,.13); --data2:#2F63B8;
+  --grp-well:#FBFAF6; --track:rgba(120,120,128,.22);
+}
+.rnd{font-family:var(--rnd)}
+#sbar,#vpfix{display:none}
+body.ios-sa #sbar{display:block;position:fixed;top:0;left:0;right:0;height:max(var(--sat),1px);
+  background-color:var(--bgtop);z-index:31;pointer-events:none}
+#vpfix{position:fixed;inset:0;visibility:hidden;pointer-events:none;z-index:-1}
+body.ios-sa #vpfix{display:block}
+.ic{display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;line-height:0}
+.ic svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.ic.f svg{fill:currentColor;stroke:none}
+.ic.sm svg{width:15px;height:15px}
+.ic.lg svg{width:24px;height:24px}
+
+/* header: a real large title, per-tab actions beside the cog */
+.hbar{height:54px;gap:2px}
+.hbar h1{flex:1;min-width:0;font-size:27px;font-weight:800;letter-spacing:-.7px}
+.hacts{display:flex;align-items:center}
+.hacts .icon-btn{color:var(--acc)}
+
+/* cards */
+.card{border-radius:22px;padding:16px}
+.card h3{font-size:16px;font-weight:750;letter-spacing:-.1px}
+.card-h{display:flex;align-items:center;gap:10px;margin:-2px 0 12px;min-height:32px}
+.card-h h3{margin:0;flex:1;min-width:0}
+.badge{width:32px;height:32px;border-radius:10px;background:var(--tint);color:var(--acc);
+  display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+.badge .ic svg{width:18px;height:18px}
+.badge.gold{color:var(--gold)}
+.link{color:var(--acc);font-weight:700;font-size:14.5px;min-height:36px;padding:0 2px 0 8px;
+  display:inline-flex;align-items:center;gap:2px;flex:0 0 auto}
+.link .ic svg{width:16px;height:16px}
+.link:active{opacity:.55}
+
+/* buttons: primary (inverse) · tint (secondary) · plain (tertiary) */
+.btn .ic svg{width:19px;height:19px}
+.btn.tint{background:var(--tint);color:var(--acc)}
+.btn.tint:active{background:var(--tint-2);filter:none}
+.btn.plain{background:none;box-shadow:none;color:var(--acc)}
+.btn.plain.danger{background:none;color:var(--red)}
+.btn.lg{min-height:56px;font-size:17.5px;border-radius:16px}
+.round-btn{width:42px;height:42px;border-radius:21px;background:var(--tint);color:var(--acc);
+  display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+.round-btn:active{transform:scale(.93);background:var(--tint-2)}
+.round-btn .ic svg{width:17px;height:17px}
+
+/* action sheets: grouped rows instead of a wall of buttons */
+.menu-group{background:var(--card2);border-radius:16px;overflow:hidden;margin:0 0 12px}
+.menu-row{display:flex;align-items:center;gap:13px;width:100%;min-height:54px;padding:8px 14px;
+  text-align:left;font-size:16px;font-weight:600;color:var(--text);position:relative}
+.menu-row+.menu-row::before{content:'';position:absolute;top:0;left:49px;right:0;border-top:1px solid var(--line)}
+.menu-row>.ic{color:var(--acc);width:22px}
+.menu-row .t{flex:1;min-width:0;line-height:1.3}
+.menu-row .s{display:block;font-size:12.5px;color:var(--dim);font-weight:500;margin-top:2px}
+.menu-row .v{color:var(--dim);font-size:14.5px;font-weight:600;flex:0 0 auto}
+.menu-row .chev{color:var(--dim);opacity:.6}
+.menu-row.danger,.menu-row.danger>.ic{color:var(--red)}
+.menu-row.on .v{color:var(--acc)}
+.menu-row:active{background:var(--line)}
+.menu-title{font-size:12px;font-weight:800;color:var(--dim);text-transform:uppercase;letter-spacing:.7px;margin:16px 4px 8px}
+.menu-title:first-child{margin-top:4px}
+.ex-row.off{opacity:.5}
+.ex-row.off .sel-dot{visibility:hidden}
+
+/* explanations fold away — the numbers lead, the prose is one tap off */
+details.info{margin-top:10px}
+details.info>summary{list-style:none;display:inline-flex;align-items:center;gap:6px;font-size:12.5px;
+  font-weight:700;color:var(--dim);cursor:pointer;min-height:30px;border-radius:8px}
+details.info>summary::-webkit-details-marker{display:none}
+details.info>summary .ic svg{width:15px;height:15px}
+details.info[open]>summary{color:var(--acc)}
+details.info>p{font-size:12.5px;color:var(--dim);line-height:1.55;margin:2px 2px 6px}
+
+/* Log home: today first */
+.hero{padding:18px 16px 16px;border-color:var(--tint-2);
+  background:linear-gradient(155deg,var(--tint) 0%,transparent 60%),var(--card)}
+.hero-eb{font-size:11px;font-weight:800;letter-spacing:1.4px;text-transform:uppercase;color:var(--acc);
+  display:flex;align-items:center;gap:6px}
+.hero-eb .ic svg{width:14px;height:14px}
+.hero-t{font-family:var(--serif);font-style:italic;font-size:30px;font-weight:600;letter-spacing:-.3px;
+  line-height:1.15;margin:8px 0 4px;color:var(--text)}
+.hero-t.rest{color:var(--dim)}
+.hero-s{font-size:13.5px;color:var(--dim);line-height:1.45;margin-bottom:14px}
+.hero-f{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:10px;
+  font-size:13px;color:var(--dim)}
+.hero-f b{color:var(--text);font-weight:700}
+.wk-days{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin:0 0 14px}
+.wk-day{display:flex;flex-direction:column;align-items:center;gap:6px}
+.wk-dot{width:32px;height:32px;border-radius:16px;background:var(--well);color:var(--acc-ink);
+  display:flex;align-items:center;justify-content:center}
+.wk-dot .ic svg{width:15px;height:15px;stroke-width:2.6}
+.wk-day.on .wk-dot{background:var(--acc)}
+.wk-day.today .wk-dot{box-shadow:0 0 0 2px var(--card),0 0 0 3.5px var(--acc)}
+.wk-d{font-size:11px;font-weight:700;color:var(--dim)}
+.wk-day.today .wk-d{color:var(--acc)}
+.wk-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.wk-stat{background:var(--well);border-radius:14px;padding:10px 12px;min-width:0}
+.wk-stat .v{font-family:var(--rnd);font-size:19px;font-weight:800;letter-spacing:-.3px;white-space:nowrap}
+.wk-stat .k{font-size:10.5px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;margin-top:1px}
+
+/* active workout: a sticky bar keeps the clock and Finish in reach */
+.wo-bar{position:sticky;top:4px;z-index:6;background:var(--glass);
+  -webkit-backdrop-filter:blur(22px) saturate(1.5);backdrop-filter:blur(22px) saturate(1.5);
+  border:1px solid var(--line);border-radius:20px;padding:10px 10px 12px 14px;margin-bottom:12px;
+  box-shadow:var(--shadow);overflow:hidden}
+.wo-bar-row{display:flex;align-items:center;gap:8px}
+.wo-time{font-family:var(--rnd);font-size:27px;font-weight:800;letter-spacing:-.6px;line-height:1.05}
+.wo-info{flex:1;min-width:0;padding-left:4px}
+.wo-name{font-size:14px;font-weight:750;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wo-bar .wo-stats{margin-top:1px;font-size:12px;gap:2px 8px}
+.wo-bar .btn.green{min-height:42px;padding:0 16px;font-size:15.5px;border-radius:13px}
+.wo-bar .icon-btn{width:38px;height:38px}
+.wo-prog{position:absolute;left:0;right:0;bottom:0;height:3px;background:var(--line)}
+.wo-prog>div{height:100%;width:0;background:var(--grn);transition:width .3s ease}
+.ex-h{display:flex;align-items:flex-start;gap:8px}
+.ex-prog{flex:0 0 auto;font-size:12px;font-weight:800;color:var(--dim);background:var(--well);border-radius:10px;
+  padding:5px 9px;margin-top:2px;font-variant-numeric:tabular-nums;display:inline-flex;align-items:center;gap:3px}
+.ex-prog.done{background:var(--grn-dim);color:var(--grn)}
+.ex-prog .ic svg{width:13px;height:13px;stroke-width:2.6}
+
+/* rest timer: frosted, with what comes next */
+#restpill{background:var(--glass);-webkit-backdrop-filter:blur(24px) saturate(1.5);backdrop-filter:blur(24px) saturate(1.5);
+  border-radius:24px;padding:10px}
+#rt-track{height:4px;margin:0 4px 8px}
+.rt-mid{flex:1;min-width:0;text-align:center}
+#rt-time{font-family:var(--rnd);font-size:31px;line-height:1.05}
+.rt-lbl{font-size:10.5px;font-weight:800;color:var(--dim);letter-spacing:.6px;text-transform:uppercase;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* nav: accent marks the active tab, not just a brighter grey */
+nav button.on{color:var(--acc)}
+body.light nav button.on{color:var(--acc)}
+
+/* sheets: the grabber is a real handle now — drag down to dismiss */
+.sheet{border-radius:26px 26px 0 0}
+.grabber{width:38px;height:5px;border-radius:3px;margin:2px auto 6px}
+.grabber,.sheet-head{touch-action:none}
+.sheet-head h2{font-size:20px;letter-spacing:-.3px}
+.sheet-x{width:34px;height:34px;border-radius:17px}
+
+/* settings: grouped rows */
+.set-sec{font-size:12px;font-weight:800;color:var(--dim);text-transform:uppercase;letter-spacing:.7px;margin:22px 4px 8px}
+.set-grp{background:var(--card2);border-radius:16px;padding:0 14px}
+.set-grp>.lrow{min-height:50px;padding:9px 0}
+.set-grp>.lrow:last-child{border-bottom:0}
+.set-grp .lbl{margin:12px 0 6px}
+.set-grp>.in,.set-grp>div>.in{background:var(--well)}
+.set-grp .seg,.set-grp .in,.set-grp .row-in{background:var(--grp-well)}
+/* an ON switch must read as on in BOTH themes: 5.7's `body.light .tgl` rule
+   out-ranked `.tgl.on`, so in the light theme every enabled switch rendered
+   in the grey off-track colour */
+.tgl{background:var(--track)}
+.tgl.on,body.light .tgl.on{background:var(--grn)}
+.set-grp .lrow .grow{min-width:0}
+details.set-adv{margin-top:22px}
+details.set-adv>summary{list-style:none;display:flex;align-items:center;gap:6px;cursor:pointer;min-height:36px;
+  font-size:12px;font-weight:800;color:var(--dim);text-transform:uppercase;letter-spacing:.7px;margin:0 4px 6px}
+details.set-adv>summary::-webkit-details-marker{display:none}
+details.set-adv[open]>summary{color:var(--acc)}
+.set-note{font-size:12px;color:var(--dim);line-height:1.45;margin:7px 4px 0}
+.row-in{width:96px;flex:0 0 auto;text-align:right;background:var(--well);border:1px solid transparent;border-radius:10px;
+  padding:8px 10px;font-size:16px;font-weight:700;color:var(--text);outline:none;-webkit-appearance:none}
+.row-in:focus{border-color:var(--acc)}
+.row-seg{width:150px;flex:0 0 auto}
+.row-seg>button{min-height:32px}
+
+/* exercise picker: muscle filters + recently used first */
+.ex-sec{font-size:11.5px;font-weight:800;color:var(--dim);text-transform:uppercase;letter-spacing:.7px;padding:14px 2px 2px}
+.pk-chips{margin-top:9px}
+.pk-chips .chip{min-height:32px;font-size:13px;padding:0 12px}
+
+/* history / progress / body touches */
+.wo-stats>span{display:inline-flex;align-items:center;gap:4px}
+.wo-stats .ic svg{width:14px;height:14px;color:var(--dim)}
+.prb-ico{width:30px;height:30px;border-radius:10px;background:var(--tint);color:var(--gold);
+  display:flex;align-items:center;justify-content:center;font-size:0}
+.prb-ico .ic svg{width:16px;height:16px}
+.prb-line{align-items:center}
+.intro-ico .ic svg{width:17px;height:17px}
+.intro-ico{color:var(--acc)}
+.nag-i{color:var(--amb)}
+.hub-ico{width:36px;height:36px;border-radius:11px;background:var(--tint);color:var(--acc);
+  display:flex;align-items:center;justify-content:center;margin-bottom:10px;font-size:0}
+.hub-ico .ic svg{width:19px;height:19px}
+.bw-big,.rec-val,.statgrid .v,.mech-read .v{font-family:var(--rnd)}
+.del-btn{width:36px;height:36px;border-radius:10px;color:var(--dim);display:flex;align-items:center;justify-content:center;flex:0 0 auto;opacity:.7}
+.del-btn:active{background:var(--card2);opacity:1}
+.del-btn .ic svg{width:17px;height:17px}
+.tg-bar{display:flex;align-items:center;gap:10px;background:var(--card2);border:1px solid var(--tint-2);
+  border-radius:16px;padding:10px 10px 10px 12px}
+.tg-bar .grow{min-width:0}
+.tg-measure{background:var(--card2);border-radius:14px;padding:4px 12px 12px;margin-top:12px}
+.tg-measure .in{background:var(--grp-well)}
+.seg.grid2{display:grid;grid-template-columns:1fr 1fr}
+.seg.grid2>button{min-height:38px}
+.empty .big{display:flex;justify-content:center;color:var(--acc)}
+.empty .big .ic svg{width:44px;height:44px;stroke-width:1.5}
+.hist-mo{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin:18px 4px 8px}
+.hist-mo .lbl{margin:0}
+.hist-card:active{transform:scale(.99)}
+.hist-card{transition:transform .12s}
+.bal-fill{background:var(--data1)}
+.radar-glow{background:radial-gradient(circle,var(--data1-fill),transparent 65%)}
+.pr-pill{display:inline-flex;align-items:center;gap:4px;color:var(--gold);font-weight:800;font-size:13px}
+.ed-ex{border-top:1px solid var(--line);padding:12px 0 6px}
+.ed-ex:first-child{border-top:0;padding-top:4px}
+.edrow{display:grid;grid-template-columns:36px 1fr 1fr 56px 36px;gap:6px;align-items:center;margin-top:6px}
+.edrow.sethead{margin-top:8px}
 </style>
 </head>
 <body>
 
+<!-- iOS 27: a real, solid, fixed element touching the top edge — see IOS27 in the script -->
+<div id="sbar" aria-hidden="true"></div>
+<div id="vpfix" aria-hidden="true"></div>
 <header>
   <div class="hbar">
     <h1 id="htitle">IronLog</h1>
+    <div class="hacts" id="hacts"></div>
     <button class="icon-btn" id="gearbtn" aria-label="Settings">
       <!-- a real toothed cog: the old circle-plus-radiating-lines read as a sun,
            which people reasonably mistook for a light/dark toggle -->
@@ -627,10 +870,10 @@ body.light input[type=time].in::-webkit-calendar-picker-indicator{filter:none;op
 <div id="restpill">
   <div id="rt-track"><div id="rt-fill"></div></div>
   <div class="rt-row">
-    <button class="rt-btn" id="rt-minus">−15</button>
-    <div id="rt-time" class="num">0:00</div>
-    <button class="rt-btn" id="rt-plus">+15</button>
-    <button class="rt-btn x" id="rt-skip">Skip</button>
+    <button class="rt-btn" id="rt-minus" aria-label="15 seconds less">−15</button>
+    <div class="rt-mid"><div id="rt-time" class="num">0:00</div><div class="rt-lbl" id="rt-lbl">Rest</div></div>
+    <button class="rt-btn" id="rt-plus" aria-label="15 seconds more">+15</button>
+    <button class="rt-btn x" id="rt-skip" aria-label="Skip rest">Skip</button>
   </div>
 </div>
 
@@ -695,7 +938,7 @@ const BASE_MUSCLES=['Chest','Back','Shoulders','Biceps','Triceps','Forearms','Qu
 const MUSCLES=[...BASE_MUSCLES,'Front Delts','Side Delts','Rear Delts','Adductors','Abductors','Lower Back','Obliques'];
 const REGION={'Front Delts':'Shoulders','Side Delts':'Shoulders','Rear Delts':'Shoulders','Adductors':'Quads','Abductors':'Glutes','Lower Back':'Back','Obliques':'Abs'};
 const EQUIP=['Barbell','Dumbbell','Machine','Cable','Bodyweight','Kettlebell','Smith Machine','Band','Cardio','Other'];
-const APP_VER='5.7';   // shown in Settings — lets you check which build a device runs
+const APP_VER='5.8';   // shown in Settings — lets you check which build a device runs
 const DEF={unit:'kg',restSec:120,barWeight:20,plates:[25,20,15,10,5,2.5,1.25],sound:true,vibrate:true,notify:false,theme:'dark',name:'',strScale:1,coachOff:[],
   heightCm:175,        // scale reference for the movement plotter
   shellFix:'auto',     // viewport healer: 'auto' | 'on' | 'off' (see fixShell)
@@ -781,6 +1024,85 @@ function shellPlan(env){
   // the shell to chase it would be all risk and no benefit.
   if(grow>=SHELL_MIN_GROW&&grow<=SHELL_MAX_GROW)return {height:target,release:false,why:'heal'};
   return {height:null,release:true,why:grow<SHELL_MIN_GROW?'viewport-honest':'implausible-grow'};
+}
+
+/* ---------------- IOS27: known home-screen app bugs ----------------
+   (1) THE BLUR. From iOS 26 the system fills the status-bar area with a
+   Liquid Glass blur wherever WebKit can't find a solid colour at the page's
+   top edge, and iOS 27 turned it into a visible wash over the whole header.
+   WebKit skips the blur when a real position:fixed element with a solid
+   background-color touches the top edge, and extends that colour instead.
+   It reads real elements only — a pseudo-element, a gradient or the root's
+   own background are invisible to it — which is why 5.7's header::before
+   band (still painted, harmlessly) could not stop it. #sbar is that
+   element: standalone iOS only, exactly the band's colour.
+   (2) THE KEYBOARD. The first keyboard raise can shrink an installed app's
+   layout viewport by the status-bar height for good, with painting clipped
+   to the smaller window — a cropped tab bar or a dead band for the rest of
+   the session. No measurement grows it back; making WebKit lay the window
+   out again does. viewportShrunk() is the pure decision (tested with the
+   numbers devices report); it only fires once the keyboard is truly gone.
+   (3) RESUME. Standalone apps can come back from the background without
+   visibilitychange or pageshow firing, so a jump in the 1 s ticker's wall
+   clock is the resume signal. */
+function viewportShrunk(env){
+  if(!env.ios||!env.standalone)return false;
+  if(env.focused)return false;                       // a keyboard may still be up
+  if(env.sinceFocus<140)return false;                // …or still sliding away
+  if(env.vvH>0&&env.vvH<env.curH-4)return false;     // …or still insetting the view
+  if(env.vvTop>0)return false;                       // a caret pan is still unwinding
+  return env.base>0&&env.curH<=env.base-4;           // shorter than this launch has seen
+}
+const SHRINK={base:0,w:0,tries:0,wins:0,focusAt:0};
+function remeasureViewport(full){
+  // anything that scrolls loses its position when taken out of layout
+  const keep=[document.querySelector('main'),...document.querySelectorAll('.overlay .sheet')]
+    .filter(Boolean).map(el=>[el,el.scrollTop]);
+  // an empty full-viewport sentinel first: re-laying out the whole body would
+  // also replay entrance animations, so it is only the fallback
+  const el=full?document.body:document.getElementById('vpfix');
+  if(!el)return;
+  const prev=el.style.display;
+  el.style.display='none';void el.offsetHeight;      // one synchronous task:
+  el.style.display=prev;void el.offsetHeight;        // nothing paints in between
+  for(const[s2,top]of keep)s2.scrollTop=top;
+}
+const isTyping=()=>{const a=document.activeElement;return !!(a&&a.matches&&a.matches('input,textarea,select,[contenteditable]'));};
+function shrinkEnv(){
+  const vv=window.visualViewport;
+  return {ios:IS_IOS,standalone:isStandalone(),focused:isTyping(),
+    sinceFocus:Date.now()-SHRINK.focusAt,
+    vvH:vv?Math.round(vv.height):0,vvTop:vv?Math.round(vv.offsetTop):0,
+    curH:document.documentElement.clientHeight,curW:document.documentElement.clientWidth,
+    base:SHRINK.base};
+}
+// env and winH are parameters so the suite can play a device's numbers through
+function healShrink(env=shrinkEnv(),winH=()=>document.documentElement.clientHeight){
+  // a new width is a new window (rotation, iPad Split View or Stage Manager);
+  // the keyboard only ever takes height, so start the yardstick over
+  if(env.curW!==SHRINK.w){SHRINK.w=env.curW;SHRINK.base=0;}
+  // the tallest honest window this launch has seen is the yardstick
+  if(!env.focused&&!(env.vvH>0&&env.vvH<env.curH-4))SHRINK.base=Math.max(SHRINK.base,env.curH);
+  env.base=SHRINK.base;
+  if(SHRINK.tries-SHRINK.wins>=3)return false;       // three misses: stop trying
+  if(!viewportShrunk(env))return false;
+  SHRINK.tries++;
+  remeasureViewport(false);
+  if(winH()<SHRINK.base-4)remeasureViewport(true);
+  const won=winH()>=SHRINK.base-4;
+  if(won)SHRINK.wins++;
+  return won;
+}
+const RESUME={last:Date.now(),n:0};
+function resumeCheck(now){
+  const gap=now-RESUME.last;RESUME.last=now;
+  if(gap<=4000)return false;
+  RESUME.n++;
+  schedTick();
+  if(S.tab==='log'&&!S.active)renderLog();           // "today", the week strip, the greeting
+  if(RT.on)tickRest();
+  setTimeout(()=>healShrink(),300);
+  return true;
 }
 
 const E=(id,name,m,s,e)=>({id,name,m,s,e});
@@ -979,6 +1301,64 @@ function h(tag,attrs,...kids){
   }
   return el;
 }
+/* ---------------- icons ----------------
+   One stroke-icon family for the whole app (24-unit grid, drawn in
+   currentColor), replacing the mix of emoji that headings and menus used —
+   emoji render differently on every platform and can't take the theme's
+   colour. Parsed from markup because h() makes HTML-namespace nodes, which
+   never render as SVG. A leading '*' marks a filled glyph. */
+const ICONS={
+  play:'*<path d="M8.5 5.8v12.4a.8.8 0 001.2.7l9.6-6.2a.8.8 0 000-1.4L9.7 5.1a.8.8 0 00-1.2.7z"/>',
+  plus:'<path d="M12 5v14M5 12h14"/>',
+  more:'*<circle cx="5.5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="18.5" cy="12" r="1.7"/>',
+  check:'<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+  chev:'<path d="M9.5 6l6 6-6 6"/>',
+  chevd:'<path d="M6 9.5l6 6 6-6"/>',
+  x:'<path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/>',
+  clock:'<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
+  timer:'<circle cx="12" cy="13.5" r="7.5"/><path d="M12 10v3.5l2.5 1.5M9.5 3h5M18 6.5l1.5-1.5"/>',
+  calendar:'<rect x="4" y="5.5" width="16" height="14.5" rx="2.5"/><path d="M4 10h16M8.5 3.5v4M15.5 3.5v4"/>',
+  trophy:'<path d="M8 4.5h8v5.5a4 4 0 01-8 0z"/><path d="M8 6.5H5.5a2.5 2.5 0 002.8 3.7M16 6.5h2.5a2.5 2.5 0 01-2.8 3.7M12 14v3M8.5 20h7M9.5 17h5"/>',
+  dumbbell:'<path d="M6.5 5.5v13M17.5 5.5v13M3.5 8.5v7M20.5 8.5v7M6.5 12h11"/>',
+  run:'<circle cx="14.5" cy="4.8" r="1.8"/><path d="M8 20l3-5.5 3 2.5v4M6 10.5l3.5-2.5 4 1 2.5 3.5 3 .5M11 14.5l1.5-5"/>',
+  list:'<rect x="5" y="4" width="14" height="17" rx="2.5"/><path d="M9 8.5h6M9 12.5h6M9 16.5h4"/>',
+  note:'<path d="M6 4.5h8.5l3.5 3.5v11.5H6z"/><path d="M14.5 4.5V8H18M9 12h6M9 15.5h4.5"/>',
+  pin:'<path d="M9.5 4.5h5l-.8 5 3 2.8v1.2H7.3v-1.2l3-2.8zM12 13.5v6"/>',
+  calc:'<rect x="5.5" y="3.5" width="13" height="17" rx="2.5"/><path d="M8.5 7.5h7M9 11.5h.01M12 11.5h.01M15 11.5h.01M9 15h.01M12 15h.01M15 15h.01"/>',
+  ramp:'<path d="M4 20h16M6 20v-3M10 20v-6M14 20v-9M18 20V8"/>',
+  plot:'<path d="M4.5 19.5h15M7 16.5l4-6 3 3 4.5-7"/><circle cx="7" cy="16.5" r="1.3"/><circle cx="18.5" cy="6.5" r="1.3"/>',
+  swap:'<path d="M7 8h11.5l-3.5-3.5M17 16H5.5L9 19.5"/>',
+  edit:'<path d="M5 19l1-4 9.5-9.5a2.1 2.1 0 013 3L9 18z"/><path d="M13.5 7.5l3 3"/>',
+  up:'<path d="M12 19V5M6 11l6-6 6 6"/>',
+  down:'<path d="M12 5v14M6 13l6 6 6-6"/>',
+  trash:'<path d="M4.5 7h15M9.5 7V4.5h5V7M6.5 7l1 12.5h9l1-12.5M10 10.5v6M14 10.5v6"/>',
+  copy:'<rect x="8.5" y="8.5" width="11" height="11" rx="2"/><path d="M15.5 8.5v-2a2 2 0 00-2-2h-7a2 2 0 00-2 2v7a2 2 0 002 2h2"/>',
+  info:'<circle cx="12" cy="12" r="8.5"/><path d="M12 11v5M12 8h.01"/>',
+  search:'<circle cx="11" cy="11" r="6.5"/><path d="M16 16l4 4"/>',
+  flame:'<path d="M12 20.5c3.6 0 6-2.4 6-5.8 0-3.6-2.6-5.6-3.8-8.7-.3 2-1.3 3.3-2.6 3.8.2-2.8-1-5.3-3.1-6.3.4 3-3.5 5.2-3.5 9.9 0 3.9 3 7.1 7 7.1z"/>',
+  chart:'<path d="M4 19.5h16M5.5 16l4.5-5.5 3 3 5.5-7"/>',
+  user:'<circle cx="12" cy="7.5" r="3.5"/><path d="M5.5 20c.8-4 3.2-6 6.5-6s5.7 2 6.5 6"/>',
+  shield:'<path d="M12 3.5l7 2.5v5.5c0 4.5-3 7.8-7 9-4-1.2-7-4.5-7-9V6z"/><path d="M9 12l2.2 2.2L15.5 10"/>',
+  download:'<path d="M12 4.5v11M7.5 11l4.5 4.5 4.5-4.5M5 19.5h14"/>',
+  upload:'<path d="M12 15.5v-11M7.5 9l4.5-4.5L16.5 9M5 19.5h14"/>',
+  share:'<path d="M12 15V4.5M8 8.5l4-4 4 4M6.5 12v7.5h11V12"/>',
+  bell:'<path d="M6.5 16.5V11a5.5 5.5 0 0111 0v5.5l1.5 2h-14zM10 20.5h4"/>',
+  sun:'<circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4L7 17M17 7l1.4-1.4"/>',
+  scale:'<rect x="4" y="4.5" width="16" height="15" rx="3.5"/><path d="M8.5 10a5 5 0 017 0M12 10l1.2-1.8"/>',
+  camera:'<path d="M4.5 8.5h3l1.8-2.5h5.4l1.8 2.5h3v10h-15z"/><circle cx="12" cy="13" r="3.2"/>',
+  bolt:'<path d="M13 3.5L5.5 13.5h6l-1 7 7.5-10h-6z"/>',
+  ruler:'<path d="M4 15.5L15.5 4l4.5 4.5L8.5 20z"/><path d="M8 12l1.8 1.8M10.5 9.5l1.8 1.8M13 7l1.8 1.8"/>',
+  sliders:'<path d="M5 7h9M18 7h1M5 17h3M12 17h7M14 4.5v5M8 14.5v5"/>',
+  sparkle:'<path d="M12 3.5l1.9 5.1 5.1 1.9-5.1 1.9L12 17.5l-1.9-5.1L5 10.5l5.1-1.9zM18.5 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z"/>',
+};
+function ic(name,cls){
+  const s=document.createElement('span');
+  const d=ICONS[name]||'';
+  s.className='ic'+(d[0]==='*'?' f':'')+(cls?' '+cls:'');
+  s.setAttribute('aria-hidden','true');
+  s.innerHTML='<svg viewBox="0 0 24 24">'+(d[0]==='*'?d.slice(1):d)+'</svg>';
+  return s;
+}
 const epley=(w,r)=>r>0?(r===1?w:w*(1+r/30)):0;
 const isCardio=ex=>!!(ex&&(ex.cardio||ex.e==='Cardio'));
 const distUnit=()=>S.set.unit==='kg'?'km':'mi';   // distance follows the unit system
@@ -1030,6 +1410,31 @@ function sheet(title,content,opts={}){
     content);
   ov.append(sh);
   ov.addEventListener('click',e=>{if(e.target===ov)close();});
+  // The grabber always LOOKED like a handle; now it is one. Drag it (or the
+  // title bar) down to dismiss, like a native sheet: past 110 px, or a quick
+  // flick, it closes — otherwise it springs back. The ✕ keeps its tap.
+  let dragY=null,dragT=0,dragDy=0;
+  const dragDown=e=>{
+    if(closed||e.target.closest('button,input,textarea,select'))return;
+    dragY=e.clientY;dragT=performance.now();dragDy=0;
+    sh.style.transition='none';
+    try{e.currentTarget.setPointerCapture(e.pointerId);}catch(err){}
+  };
+  const dragMove=e=>{
+    if(dragY==null)return;
+    dragDy=Math.max(0,e.clientY-dragY);
+    sh.style.transform='translateY('+dragDy+'px)';
+  };
+  const dragUp=()=>{
+    if(dragY==null)return;
+    const v=dragDy/Math.max(1,performance.now()-dragT);   // px per ms
+    dragY=null;sh.style.transition='';sh.style.transform='';
+    if(dragDy>110||(dragDy>36&&v>.55))close();
+  };
+  for(const el of[sh.children[0],sh.children[1]]){
+    el.addEventListener('pointerdown',dragDown);el.addEventListener('pointermove',dragMove);
+    el.addEventListener('pointerup',dragUp);el.addEventListener('pointercancel',dragUp);
+  }
   document.body.append(ov);
   requestAnimationFrame(()=>ov.classList.add('open'));
   const entry={ov,close:()=>close(true)};
@@ -1074,6 +1479,25 @@ function ask(title,msg,okLabel,danger){
       h('button',{class:'btn mt8',onclick:()=>close()},'Cancel'));
     const close=sheet(title,c,{onClose:()=>{if(!done)res(false);}});
   });
+}
+/* Action sheets: grouped rows (icon · label · optional detail) instead of a
+   stack of identical full-width buttons, which read as a wall and buried the
+   one destructive action among nine safe ones. `groups` is an array of row
+   arrays (or {title,rows} for a headed group); each row is
+   {icon,label,sub,val,danger,on,fn} and a null row is skipped, so callers
+   can include rows conditionally. A row closes the sheet first, then runs
+   its action. */
+function menuSheet(title,groups,opts){
+  const close=sheet(title,h('div',{},groups.map(g=>{
+    const rows=(Array.isArray(g)?g:g.rows).filter(Boolean);
+    return rows.length?[g.title?h('div',{class:'menu-title'},g.title):null,h('div',{class:'menu-group'},rows.map(it=>h('button',{
+      class:'menu-row'+(it.danger?' danger':'')+(it.on?' on':''),
+      onclick:()=>{close();it.fn();}},
+      ic(it.icon||'chev'),
+      h('span',{class:'t'},it.label,it.sub?h('span',{class:'s'},it.sub):null),
+      it.val!=null?h('span',{class:'v'},it.val):null)))]:null;
+  })),opts);
+  return close;
 }
 function toast(msg,opts={}){
   const t=h('div',{class:'toast'+(opts.pr?' pr':'')},msg);
@@ -1190,73 +1614,73 @@ function settingsSheet(){
   // The two FEATURES living in Settings lead the sheet — a full library and a
   // schedule planner shouldn't hide below tuning knobs. Side-by-side hub cards.
   const hub=(icon,title,sub,fn)=>h('button',{class:'hub-btn',onclick:()=>{closeSettings();fn();}},
-    h('div',{class:'hub-ico'},icon),
+    h('div',{class:'hub-ico'},ic(icon)),
     h('div',{class:'hub-t'},title),
     h('div',{class:'hub-s'},sub));
   c.append(h('div',{class:'hub-row'},
-    hub('🏋️','Exercise library','Edit · calibrate · create',exerciseLibrarySheet),
-    hub('🗓️','Training schedule',
+    hub('dumbbell','Exercise library','Edit · calibrate · create',exerciseLibrarySheet),
+    hub('calendar','Training schedule',
       S.set.sched&&S.set.sched.on
         ?(S.set.sched.mode==='week'?'Fixed week — on':S.set.sched.days.length+'-day rotation — on')
         :'Plan your split',scheduleSheet)));
-  c.append(h('span',{class:'lbl'},'Your name'),
-    h('input',{class:'in',placeholder:'For greetings — leave blank to skip',value:S.set.name||'',
-      oninput:e=>{S.set.name=e.target.value;saveSettings();}}));
-  c.append(h('span',{class:'lbl'},'Theme'),
+  // v5.8: grouped like the system Settings app — one line per knob, and the
+  // explanation once under its group instead of under every field
+  const sec=t=>h('span',{class:'lbl set-sec'},t);
+  const grp=(...rows)=>h('div',{class:'set-grp'},...rows);
+  const note=t=>h('p',{class:'set-note'},t);
+  const row=(label,ctl)=>h('div',{class:'lrow'},h('div',{class:'grow'},label),ctl);
+  const withUnit=(inp,u)=>h('div',{class:'row',style:'gap:6px;flex:0 0 auto'},inp,h('span',{class:'dim small',style:'min-width:18px'},u));
+
+  /* ---- Profile ---- */
+  c.append(sec('Profile'),grp(
+    row('Name',h('input',{class:'row-in',style:'width:170px;font-weight:600',placeholder:'Optional',value:S.set.name||'',
+      oninput:e=>{S.set.name=e.target.value;saveSettings();}})),
+    // scale reference for the movement plotter: the figure is drawn to represent
+    // this height, which is what turns plotted travel into centimetres of ROM
+    row('Height',withUnit(h('input',{class:'row-in num',type:'text',inputmode:'decimal',value:S.set.heightCm||DEF.heightCm,
+      oninput:e=>{const v=pf(e.target.value);S.set.heightCm=v>80&&v<250?v:DEF.heightCm;saveSettings();}}),'cm')),
+    row('Units',h('div',{class:'row-seg'},seg(['kg','lb'],S.set.unit,v=>{S.set.unit=v;saveSettings();renderTab();})))),
+    note('Your name is only for the greeting; height sets the scale when you plot a machine. Switching kg ↔ lb relabels your logged numbers — it doesn’t convert them.'));
+
+  /* ---- Appearance ---- */
+  c.append(sec('Appearance'),grp(h('div',{style:'padding:12px 0'},
     seg([['dark','Black'],['light','White'],['auto','System']],S.set.theme||'dark',v=>{
       S.set.theme=v;saveSettings();applyTheme();renderTab();
-    }),
-    h('p',{class:'tiny dim',style:'margin:5px 2px 0'},'System follows your phone’s light/dark setting.'));
-  c.append(h('span',{class:'lbl'},'Units'),
-    seg(['kg','lb'],S.set.unit,v=>{S.set.unit=v;saveSettings();}));
-  // scale reference for the movement plotter: the figure is drawn to represent
-  // this height, which is what turns plotted travel into centimetres of ROM
-  c.append(h('span',{class:'lbl'},'Your height (cm)'),
-    h('input',{class:'in num',type:'text',inputmode:'decimal',value:S.set.heightCm||DEF.heightCm,
-      oninput:e=>{const v=pf(e.target.value);S.set.heightCm=v>80&&v<250?v:DEF.heightCm;saveSettings();}}),
-    h('p',{class:'tiny dim',style:'margin:5px 2px 0'},'Sets the scale when you plot a machine’s movement.'));
-  // strength-score calibration: multiplies the bodyweight standards your
-  // lifts are measured against — raise it if scores feel too generous
-  const sVal=h('span',{class:'small bold num',style:'width:52px;text-align:right'},'×'+(S.set.strScale||1).toFixed(2));
-  c.append(h('span',{class:'lbl'},'Strength score difficulty'),
-    h('div',{class:'row'},
-      h('input',{type:'range',min:'0.6',max:'1.8',step:'0.05',value:S.set.strScale||1,class:'range',
-        oninput:e=>{S.set.strScale=parseFloat(e.target.value)||1;sVal.textContent='×'+S.set.strScale.toFixed(2);saveSettings();}}),
-      sVal),
-    h('p',{class:'tiny dim',style:'margin:4px 2px 0'},'×1.00 = default calibration. If your label reads too high (or low), drag until it matches how you’d rate yourself — the radar and score rescale instantly.'));
-  const numRow=(label,key,hint)=>{
-    c.append(h('span',{class:'lbl'},label),
-      h('input',{class:'in num',inputmode:'decimal',value:S.set[key],
-        oninput:e=>{S.set[key]=numOr(e.target.value,DEF[key]);saveSettings();}}));
-    if(hint)c.append(h('p',{class:'tiny dim',style:'margin:5px 2px 0'},hint));
+    }))),
+    note('System follows your phone’s light/dark setting.'));
+
+  /* ---- Workout ---- */
+  const numIn=key=>h('input',{class:'row-in num',inputmode:'decimal',value:S.set[key],
+    oninput:e=>{S.set[key]=numOr(e.target.value,DEF[key]);saveSettings();}});
+  c.append(sec('Workout'),grp(
+    row('Default rest',withUnit(numIn('restSec'),'s')),
+    row('Bar weight',withUnit(numIn('barWeight'),S.set.unit)),
+    h('div',{style:'padding:10px 0 12px'},h('div',{style:'margin:0 0 7px'},'Plates you own (per side)'),
+      h('input',{class:'in',inputmode:'text',autocapitalize:'off',autocorrect:'off',spellcheck:'false',value:S.set.plates.join(', '),
+        oninput:e=>{
+          const p=e.target.value.split(/[,\s]+/).map(Number).filter(v=>v>0).sort((a,b)=>b-a);
+          if(p.length){S.set.plates=p;saveSettings();}
+        }}))),
+    note('Rest auto-starts after each logged set — override it for one exercise from its menu.'));
+
+  /* ---- Rest timer alerts ---- */
+  const tgl=(key,label)=>{
+    const t=h('button',{class:'tgl'+(S.set[key]?' on':''),role:'switch','aria-checked':String(!!S.set[key]),'aria-label':label,
+      onclick:()=>{S.set[key]=!S.set[key];t.classList.toggle('on',S.set[key]);t.setAttribute('aria-checked',String(S.set[key]));saveSettings();}});
+    return t;
   };
-  numRow('Default rest timer (seconds)','restSec','Auto-starts after each logged set. Override per exercise from its ⋯ menu.');
-  numRow('Bar weight','barWeight');
-  c.append(h('span',{class:'lbl'},'Available plates (per side)'),
-    h('input',{class:'in',inputmode:'text',autocapitalize:'off',autocorrect:'off',spellcheck:'false',value:S.set.plates.join(', '),
-      oninput:e=>{
-        const p=e.target.value.split(/[,\s]+/).map(Number).filter(v=>v>0).sort((a,b)=>b-a);
-        if(p.length){S.set.plates=p;saveSettings();}
-      }}));
-  const tglRow=(label,key)=>{
-    const t=h('button',{class:'tgl'+(S.set[key]?' on':''),onclick:()=>{S.set[key]=!S.set[key];t.classList.toggle('on',S.set[key]);saveSettings();}});
-    c.append(h('div',{class:'lrow'},h('div',{class:'grow'},label),t));
-  };
-  c.append(h('span',{class:'lbl'},'Rest timer alerts'));
-  tglRow('Sound','sound');
-  tglRow('Vibration','vibrate');
-  c.append(h('p',{class:'tiny dim',style:'margin:4px 2px 0'},'iPhone note: web apps can’t drive the vibration motor — IronLog taps the system haptic instead (iOS 18+, best-effort). Sound is the reliable alert.'));
   // notification toggle: enabling asks for permission (must be a user gesture)
   const ns=notifSupport();
-  const nStatus=h('p',{class:'tiny dim',style:'margin:2px 2px 0'});
+  const nStatus=h('div',{class:'tiny dim',style:'margin-top:2px'});
   const isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent);
   const nUpdate=()=>{
     if(!ns.ok)nStatus.textContent=ns.why;
     else if(Notification.permission==='denied')nStatus.textContent='Blocked — allow notifications for this site in browser settings.';
-    else nStatus.textContent=S.set.notify?'Notifies when rest ends while the app is hidden.':'Off — sound & vibration still work.';
+    else nStatus.textContent=S.set.notify?'When rest ends while the app is hidden.':'Off — sound & vibration still work.';
     if(isIOS)nStatus.textContent+=' iPhone: needs HTTPS + Add to Home Screen (iOS 16.4+).';
   };
-  const nt=h('button',{class:'tgl'+(S.set.notify&&ns.ok&&Notification.permission==='granted'?' on':''),onclick:async()=>{
+  const nOn=()=>!!(S.set.notify&&ns.ok&&Notification.permission==='granted');
+  const nt=h('button',{class:'tgl'+(nOn()?' on':''),role:'switch','aria-checked':String(nOn()),'aria-label':'Notification',onclick:async()=>{
     if(!ns.ok){toast(ns.why);return;}
     if(!S.set.notify){
       let perm=Notification.permission;
@@ -1264,54 +1688,53 @@ function settingsSheet(){
       if(perm!=='granted'){toast(perm==='denied'?'Blocked — allow notifications in browser settings':'Permission not granted');nUpdate();return;}
       S.set.notify=true;
     }else S.set.notify=false;
-    nt.classList.toggle('on',S.set.notify);
+    nt.classList.toggle('on',S.set.notify);nt.setAttribute('aria-checked',String(S.set.notify));
     saveSettings();nUpdate();
   }});
-  c.append(h('div',{class:'lrow'},
-    h('div',{class:'grow'},'Notification'),
-    h('button',{class:'btn sm inline',style:'min-height:36px;font-size:13px;flex:0 0 auto',onclick:()=>{
-      if(!ns.ok){toast(ns.why);return;}
-      if(Notification.permission!=='granted'){toast('Turn the toggle on first to grant permission');return;}
-      notifyRestDone('Bench Press',true);
-      toast('Test notification sent');
-    }},'Test'),
-    nt),nStatus);
+  c.append(sec('Rest timer alerts'),grp(
+    row('Sound',tgl('sound','Sound')),
+    row('Vibration',tgl('vibrate','Vibration')),
+    h('div',{class:'lrow'},
+      h('div',{class:'grow'},'Notification',nStatus),
+      h('button',{class:'btn sm inline tint',style:'min-height:34px;font-size:13px;flex:0 0 auto;padding:0 12px',onclick:()=>{
+        if(!ns.ok){toast(ns.why);return;}
+        if(Notification.permission!=='granted'){toast('Turn the toggle on first to grant permission');return;}
+        notifyRestDone('Bench Press',true);
+        toast('Test notification sent');
+      }},'Test'),
+      nt)),
+    note('iPhone: web apps can’t drive the vibration motor — IronLog taps the system haptic instead (iOS 18+, best-effort). Sound is the reliable alert.'));
   nUpdate();
-  // Display fix escape hatch. 'auto' heals only iOS home-screen mode, which is
-  // the only platform that mis-reports its viewport. It is exposed because the
-  // failure mode is severe (an unreachable tab bar) and indistinguishable from
-  // a correct heal in the DOM — so if a device we have never tested gets it
-  // wrong, it can be corrected here instead of waiting for a new build.
-  c.append(h('hr'),h('span',{class:'lbl'},'Fill the screen'),
-    seg([['auto','Automatic'],['on','Always'],['off','Never']],S.set.shellFix||'auto',v=>{
-      S.set.shellFix=v;saveSettings();
-      document.documentElement.style.height='';
-      document.body.style.height='';
-      document.body.classList.remove('vfix');
-    }),
-    h('p',{class:'tiny dim',style:'margin:5px 2px 0'},
-      'Automatic is right for every tested phone. iPhone home-screen apps under-report their own screen height, so IronLog stretches the layout to the real screen there — and only there. Switch to Never if the tab bar ever sits too low, or Always if there is a gap beneath it.'));
 
-  /* ---- Data safety ---- */
-  const importFile=h('input',{type:'file',accept:'.json,application/json',style:'display:none',
-    onchange:e=>{if(e.target.files[0])importJSON(e.target.files[0]);e.target.value='';}});
+  /* ---- Strength score ---- */
+  // multiplies the bodyweight standards your lifts are measured against —
+  // raise it if scores feel too generous
+  const sVal=h('span',{class:'small bold num',style:'width:50px;text-align:right'},'×'+(S.set.strScale||1).toFixed(2));
+  c.append(sec('Strength score'),grp(h('div',{class:'row',style:'padding:10px 0'},
+    h('span',{style:'flex:0 0 auto'},'Difficulty'),
+    h('input',{type:'range',min:'0.6',max:'1.8',step:'0.05',value:S.set.strScale||1,class:'range','aria-label':'Strength score difficulty',
+      oninput:e=>{S.set.strScale=parseFloat(e.target.value)||1;sVal.textContent='×'+S.set.strScale.toFixed(2);saveSettings();}}),
+    sVal)),
+    note('×1.00 is the default calibration. If your label reads too high (or low), drag until it matches how you’d rate yourself — the radar and score rescale instantly.'));
+
+  /* ---- Your data ---- */
   const stPill=h('span',{class:'ds-pill'},'Checking…');
-  const stNote=h('p',{class:'tiny dim',style:'margin:7px 2px 0'});
-  const bkLine=h('p',{class:'small',style:'margin:10px 2px 0'});
+  const stNote=h('p',{class:'tiny dim',style:'margin:0 0 8px;line-height:1.5'});
+  const bkLine=h('p',{class:'small',style:'margin:0 0 4px'});
   const refreshSafety=async()=>{
     const st=await storageReport();
     const last=await kvGet('lastBackupAt');
     if(st.persisted===true){
       stPill.textContent='Protected';stPill.className='ds-pill good';
-      stNote.textContent='This browser has marked IronLog’s data as persistent, so it will not be cleared to free up space. Keep backups anyway — a persistent origin is still lost if the app is uninstalled or the browser data is cleared by hand.';
+      stNote.textContent='This browser has marked IronLog’s data as persistent, so it won’t be cleared to free up space. Keep backups anyway — it is still lost if the app is uninstalled or its data cleared by hand.';
     }else if(st.persisted===false){
       stPill.textContent='At risk';stPill.className='ds-pill bad';
-      stNote.textContent='This browser is treating IronLog’s data as disposable, which means it can be cleared without warning to free up space — this is what wipes an app’s history "for no reason". Installing IronLog to the home screen and opening it regularly usually earns protection; until then, export a backup often.';
+      stNote.textContent='This browser treats IronLog’s data as disposable: it can be cleared without warning to free up space — what wipes an app’s history “for no reason”. Installing to the home screen and opening it regularly usually earns protection; until then, back up often.';
     }else{
       stPill.textContent='Unknown';stPill.className='ds-pill';
-      stNote.textContent='This browser does not report whether it will keep the data. Export a backup regularly.';
+      stNote.textContent='This browser does not report whether it will keep the data. Back up regularly.';
     }
-    if(st.quota)stNote.textContent+=' Using '+fmtBytes(st.usage)+' of about '+fmtBytes(st.quota)+' available.';
+    if(st.quota)stNote.textContent+=' Using '+fmtBytes(st.usage)+' of about '+fmtBytes(st.quota)+'.';
     if(last){
       const d=Math.floor((Date.now()-last)/86400000);
       bkLine.textContent='Last backup: '+(d<=0?'today':d===1?'yesterday':d+' days ago')+'.';
@@ -1321,16 +1744,36 @@ function settingsSheet(){
       bkLine.className='small'+(S.workouts.length?' warn-t':' dim');
     }
   };
-  c.append(h('div',{class:'lrow'},h('div',{class:'grow bold'},'Data safety'),stPill),stNote,bkLine,
-    h('p',{class:'tiny dim',style:'margin:8px 2px 10px'},
-      S.workouts.length+' workouts · '+S.ex.size+' exercises · '+S.photos.length+' photos — all stored on this device. IronLog v'+APP_VER+' · '+location.origin),
-    h('button',{class:'btn primary',onclick:exportJSON},'Save a backup file'));
+  c.append(sec('Your data'),grp(
+    h('div',{class:'lrow'},h('div',{class:'grow bold'},'Data safety'),stPill),
+    h('div',{style:'padding:10px 0 12px'},stNote,bkLine,
+      h('p',{class:'tiny dim',style:'margin:0'},
+        S.workouts.length+' workouts · '+S.ex.size+' exercises · '+S.photos.length+' photos — all on this device. IronLog v'+APP_VER+' · '+location.origin))),
+    h('button',{class:'btn primary mt12',onclick:exportJSON},ic('download'),'Save a backup file'));
   if(canShareBackup())
-    c.append(h('button',{class:'btn mt8',onclick:shareJSON},'Send a backup somewhere safe…'));
+    c.append(h('button',{class:'btn tint mt8',onclick:shareJSON},ic('share'),'Send a backup somewhere safe…'));
   c.append(
-    h('button',{class:'btn mt8',onclick:()=>importFile.click()},'Restore from a backup'),
-    h('button',{class:'btn danger mt8',onclick:eraseAll},'Erase all data'),
-    importFile);
+    h('button',{class:'btn tint mt8',onclick:pickBackupFile},ic('upload'),'Restore from a backup'),
+    h('button',{class:'btn plain danger mt8',onclick:eraseAll},'Erase all data'));
+
+  /* ---- Advanced ---- */
+  // Display fix escape hatch. 'auto' heals only iOS home-screen mode, which is
+  // the only platform that mis-reports its viewport. It is exposed because the
+  // failure mode is severe (an unreachable tab bar) and indistinguishable from
+  // a correct heal in the DOM — so if a device we have never tested gets it
+  // wrong, it can be corrected here instead of waiting for a new build. Folded
+  // away in 5.8: it is a repair switch, not a preference.
+  c.append(h('details',{class:'set-adv'},h('summary',{},ic('sliders','sm'),'Advanced'),
+    h('div',{class:'set-grp'},h('div',{style:'padding:12px 0 4px'},
+      h('div',{style:'margin:0 0 8px'},'Fill the screen'),
+      seg([['auto','Automatic'],['on','Always'],['off','Never']],S.set.shellFix||'auto',v=>{
+        S.set.shellFix=v;saveSettings();
+        document.documentElement.style.height='';
+        document.body.style.height='';
+        document.body.classList.remove('vfix');
+      })),
+      h('p',{class:'tiny dim',style:'margin:6px 0 12px;line-height:1.5'},
+        'Automatic is right for every tested phone. iPhone home-screen apps under-report their own screen height, so IronLog stretches the layout to the real screen there — and only there. Switch to Never if the tab bar ever sits too low, or Always if there is a gap beneath it.'))));
   refreshSafety();
   closeSettings=sheet('Settings',c);
 }
@@ -1386,6 +1829,12 @@ async function shareJSON(){
     if(err&&err.name==='AbortError')return;   // user dismissed the share sheet
     toast('Share failed: '+err.message);
   }
+}
+// one shared "Restore from a backup" picker, wherever it is offered
+function pickBackupFile(){
+  const f=h('input',{type:'file',accept:'.json,application/json',style:'display:none',
+    onchange:e=>{const file=e.target.files[0];f.remove();if(file)importJSON(file);}});
+  document.body.append(f);f.click();
 }
 async function importJSON(file){
   let data;
@@ -1547,17 +1996,45 @@ function addExerciseToActive(exId,tpl){
 }
 
 /* ----- exercise picker (shared by Log, Templates, Progress) ----- */
+/* Muscle-group filters for the picker. Mid-workout you are nearly always
+   re-adding a lift you have done before, so once there is history the picker
+   opens on "Recent" (most recently trained first) rather than an A–Z list of
+   69. Typing searches the whole library regardless of the filter. */
+const PICK_GROUPS=[['recent','Recent'],['all','All'],['Chest','Chest'],['Back','Back'],['Shoulders','Shoulders'],
+  ['Arms','Arms'],['Legs','Legs'],['Core','Core'],['cardio','Cardio']];
+const GROUP_OF={Chest:'Chest',Back:'Back','Lower Back':'Back',Traps:'Back',Shoulders:'Shoulders','Front Delts':'Shoulders',
+  'Side Delts':'Shoulders','Rear Delts':'Shoulders',Biceps:'Arms',Triceps:'Arms',Forearms:'Arms',Quads:'Legs',
+  Hamstrings:'Legs',Glutes:'Legs',Calves:'Legs',Adductors:'Legs',Abductors:'Legs',Abs:'Core',Obliques:'Core'};
+function inPickGroup(x,g){
+  if(g==='all')return true;
+  if(g==='cardio')return isCardio(x);
+  return !isCardio(x)&&GROUP_OF[x.m]===g;
+}
+function lastUsedMap(){   // exId → when it was last trained
+  const m=new Map();
+  for(const w of S.workouts)for(const en of w.exs){const t=m.get(en.exId);if(!t||w.finishedAt>t)m.set(en.exId,w.finishedAt);}
+  return m;
+}
 function pickExercises({multi=true,title='Add exercises',onDone,allowCreate=true,exclude=null,editable=true}){
   const sel=new Set();let q='';
+  const used=lastUsedMap();
+  let grp=used.size?'recent':'all';
   const list=h('div');
   const addBtn=multi?h('button',{class:'btn primary mt12',onclick:()=>{if(sel.size){close();onDone([...sel]);}}},'Add (0)'):null;
-  const updateAdd=()=>{if(addBtn){addBtn.textContent='Add ('+sel.size+')';addBtn.style.opacity=sel.size?'1':'.5';}};
+  const updateAdd=()=>{if(addBtn){addBtn.textContent=sel.size?'Add '+sel.size+' exercise'+(sel.size>1?'s':''):'Add (0)';addBtn.style.opacity=sel.size?'1':'.5';}};
+  const chips=h('div',{class:'chips pk-chips'});
+  function paintChips(){
+    chips.replaceChildren(...PICK_GROUPS.filter(([g])=>g!=='recent'||used.size).map(([g,l])=>
+      h('button',{class:'chip'+(grp===g&&!q?' on':''),onclick:()=>{grp=g;paintChips();rows();list.parentElement&&(list.closest('.sheet').scrollTop=0);}},l)));
+  }
   function rows(){
     const ql=q.toLowerCase();
-    const exs=[...S.ex.values()].sort((a,b)=>a.name.localeCompare(b.name))
-      .filter(x=>x.id!==exclude)
-      .filter(x=>!ql||x.name.toLowerCase().includes(ql)||x.m.toLowerCase().includes(ql)||(x.e||'').toLowerCase().includes(ql));
-    if(!exs.length){list.replaceChildren(h('div',{class:'empty'},h('p',{},'No match — create it with “+ New”')));return;}
+    let exs=[...S.ex.values()].filter(x=>x.id!==exclude);
+    if(ql)exs=exs.filter(x=>x.name.toLowerCase().includes(ql)||x.m.toLowerCase().includes(ql)||(x.e||'').toLowerCase().includes(ql))
+      .sort((a,b)=>a.name.localeCompare(b.name));
+    else if(grp==='recent')exs=exs.filter(x=>used.has(x.id)).sort((a,b)=>used.get(b.id)-used.get(a.id));
+    else exs=exs.filter(x=>inPickGroup(x,grp)).sort((a,b)=>a.name.localeCompare(b.name));
+    if(!exs.length){list.replaceChildren(h('div',{class:'empty'},h('p',{},ql?'No match — create it with “+ New”':'Nothing here yet.')));return;}
     list.replaceChildren(...exs.map(x=>{
       const row=h('div',{class:'ex-row'+(sel.has(x.id)?' sel':''),onclick:()=>{
         if(multi){sel.has(x.id)?sel.delete(x.id):sel.add(x.id);row.classList.toggle('sel');updateAdd();}
@@ -1567,23 +2044,24 @@ function pickExercises({multi=true,title='Add exercises',onDone,allowCreate=true
       h('div',{class:'grow'},
         h('div',{class:'bold',style:'font-size:15.5px'},x.name),
         h('div',{class:'tiny dim'},x.m+(x.s&&x.s.length?', '+x.s.join(', '):'')+' · '+x.e
-          +(mechSummary(x)?' · '+mechSummary(x):''))),
-      editable?h('button',{class:'icon-btn',style:'width:38px;height:38px;flex:0 0 auto;font-size:17px;color:var(--dim)',
-        onclick:ev=>{ev.stopPropagation();editExerciseSheet(x,()=>{rows();renderTab();});}},'⚙'):null);
+          +(mechSummary(x)?' · '+mechSummary(x):'')
+          +(!ql&&grp==='recent'?' · '+agoTxt(used.get(x.id)):''))),
+      editable?h('button',{class:'icon-btn','aria-label':'Edit '+x.name,style:'width:38px;height:38px;flex:0 0 auto;color:var(--dim)',
+        onclick:ev=>{ev.stopPropagation();editExerciseSheet(x,()=>{rows();renderTab();});}},ic('edit')):null);
       return row;
     }));
   }
-  const search=h('input',{class:'in',placeholder:'Search exercises…',oninput:e=>{q=e.target.value;rows();}});
+  const search=h('input',{class:'in',type:'search',placeholder:'Search exercises…',oninput:e=>{q=e.target.value;paintChips();rows();}});
   const c=h('div',{},
     h('div',{class:'search-wrap'},h('div',{class:'row'},search,
-      allowCreate?h('button',{class:'btn sm inline',style:'flex:0 0 auto',onclick:()=>newExerciseSheet(ex=>{
+      allowCreate?h('button',{class:'btn sm inline tint',style:'flex:0 0 auto',onclick:()=>newExerciseSheet(ex=>{
         if(multi){sel.add(ex.id);updateAdd();rows();}
         else{close();onDone([ex.id]);}
-      })},'+ New'):null)),
+      })},ic('plus','sm'),'New'):null),chips),
     list,
     addBtn?h('div',{class:'sticky-add'},addBtn):null);
   const close=sheet(title,c);
-  rows();updateAdd();
+  paintChips();rows();updateAdd();
 }
 /* Browse and edit the whole library without starting a workout first —
    reachable from Settings. Same row treatment as the picker, but a tap opens
@@ -1592,6 +2070,7 @@ function exerciseLibrarySheet(){
   let q='',filter='all';
   const list=h('div');
   const count=h('p',{class:'tiny dim',style:'margin:0 2px 6px'});
+  const tgWrap=h('div');
   function rows(){
     const ql=q.toLowerCase();
     const all=[...S.ex.values()].sort((a,b)=>a.name.localeCompare(b.name));
@@ -1600,6 +2079,9 @@ function exerciseLibrarySheet(){
         ||(filter==='todo'&&!isCardio(x)&&!STR_EQUIP.has(x.e)&&!isCalibrated(x)))
       .filter(x=>!ql||x.name.toLowerCase().includes(ql)||x.m.toLowerCase().includes(ql)||(x.e||'').toLowerCase().includes(ql));
     count.textContent=exs.length+' of '+all.length+' exercises';
+    tgWrap.replaceChildren(filter==='todo'&&exs.some(x=>tgSuggest(x).length)
+      ?h('button',{class:'btn tint',style:'margin:2px 0 10px',onclick:()=>tgBulkSheet(()=>{rows();renderTab();})},
+        ic('sparkle'),'Calibrate with Technogym presets'):'');
     if(!exs.length){
       list.replaceChildren(h('div',{class:'empty'},h('p',{},
         filter==='todo'?'Every machine you own is calibrated. Nice.':'No match — create it with “+ New”.')));
@@ -1611,16 +2093,16 @@ function exerciseLibrarySheet(){
           x.custom?h('span',{class:'mech-tag',style:'color:var(--acc);background:var(--acc-dim)'},'CUSTOM'):null),
         h('div',{class:'tiny dim'},x.m+(x.s&&x.s.length?', '+x.s.join(', '):'')+' · '+x.e
           +(mechSummary(x)?' · '+mechSummary(x):''))),
-      h('span',{class:'dim'},'›'))));
+      h('span',{class:'dim'},ic('chev','sm')))));
   }
-  const search=h('input',{class:'in',placeholder:'Search exercises…',oninput:e=>{q=e.target.value;rows();}});
+  const search=h('input',{class:'in',type:'search',placeholder:'Search exercises…',oninput:e=>{q=e.target.value;rows();}});
   const c=h('div',{},
     h('div',{class:'search-wrap'},
       h('div',{class:'row'},search,
-        h('button',{class:'btn sm inline',style:'flex:0 0 auto',
-          onclick:()=>newExerciseSheet(()=>rows())},'+ New')),
+        h('button',{class:'btn sm inline tint',style:'flex:0 0 auto',
+          onclick:()=>newExerciseSheet(()=>rows())},ic('plus','sm'),'New')),
       h('div',{style:'margin-top:8px'},seg([['all','All'],['custom','Custom'],['todo','To calibrate']],'all',v=>{filter=v;rows();}))),
-    count,list);
+    count,tgWrap,list);
   sheet('Exercise library',c);
   rows();
 }
@@ -1863,8 +2345,12 @@ function movementSheet(ex,onSaved){
   for(const k of PLOT_KEYS)M[k]=src[k]!=null?src[k]:base[k];
   let uni=!!ex.uni;
   // leg exercises push with the feet, so that is the limb that should track
-  // the path — and the label should say FEET, not HANDS
-  const legs=LEG_M.has(ex.m);
+  // the path — and the label should say FEET, not HANDS. A Technogym preset
+  // can override it: a sideways or pad-driven movement tracks no limb at all.
+  let track=src.track||(LEG_M.has(ex.m)?'legs':'arms');
+  M.preset=src.preset||null;
+  const legs=()=>track==='legs';
+  const pathLbl=()=>{const p=TG.find(q=>q.id===M.preset);return p&&p.plbl?p.plbl:legs()?'FEET':'HANDS';};
 
   // NB: h() uses createElement, which would make an HTML-namespace <svg> whose
   // children never become real SVG nodes. Parsing the markup gets the namespace
@@ -1891,7 +2377,7 @@ function movementSheet(ex,onSaved){
     const lerp=(a,b)=>a+(b-a)*t;
     const tgt=[lerp(M.hx0,M.hx1),lerp(M.hy0,M.hy1)];
     const px=lerp(M.wx0,M.wx1),py=lerp(M.wy0,M.wy1);
-    dynG.innerHTML=rigFigureSVG(M.pos,M.fx,ex,tgt,legs)
+    dynG.innerHTML=rigFigureSVG(M.pos,M.fx,ex,track==='none'?null:tgt,legs())
       +'<rect x="'+(px-5).toFixed(1)+'" y="'+(py-2.2).toFixed(1)+'" width="10" height="4.4" rx="1.2" class="plate"/>';
   }
   function loop(now){
@@ -1920,7 +2406,7 @@ function movementSheet(ex,onSaved){
     let wlx=(M.wx0+M.wx1)/2,wly=Math.min(M.wy0,M.wy1)-4.5;
     // sled-style rigs run both paths in parallel, which stacks the two labels
     if(Math.abs(wlx-hlx)<17&&Math.abs(wly-hly)<8)wly=hly-7;
-    s+=lbl(hlx,hly,'hpl',legs?'FEET':'HANDS')+lbl(wlx,wly,'wpl','LOAD');
+    s+=lbl(hlx,hly,'hpl',pathLbl())+lbl(wlx,wly,'wpl','LOAD');
     svg.innerHTML=s;
     // re-grab the layer (innerHTML replaced it) and paint one frame straight
     // away, so the figure is never missing between draws
@@ -1931,7 +2417,7 @@ function movementSheet(ex,onSaved){
     rRom.textContent=Math.round(c.romCm)+' cm';
     const eff=sample*c.ratio*(uni?2:1);
     rEff.textContent=fmtW(round1(eff));
-    expl.textContent='Your '+(legs?'feet':'hands')+' travel '+Math.round(c.hd*cm)+' cm while the load rises '
+    expl.textContent='Your '+(legs()?'feet':track==='none'?pathLbl().toLowerCase():'hands')+' travel '+Math.round(c.hd*cm)+' cm while the load rises '
       +Math.round(c.wv*cm)+' cm, so every '+fmtW(sample)+' '+S.set.unit+' on this machine loads you like '
       +fmtW(round1(sample*c.ratio))+' '+S.set.unit+' of free weight'
       +(uni?', doubled to '+fmtW(round1(eff))+' '+S.set.unit+' because you log one side at a time':'')+'.';
@@ -1966,15 +2452,60 @@ function movementSheet(ex,onSaved){
   const stop=()=>{drag=null;};
   svg.addEventListener('pointerup',stop);svg.addEventListener('pointercancel',stop);
 
-  const styleSeg=seg(MECH_KINDS,M.kind,v=>{
+  const mkStyleSeg=()=>{const el=seg(MECH_KINDS,M.kind,v=>{
     M.kind=v;
     const d=PLOT_DEF[v];
-    M.pos=d.pos;M.fx=d.fx;
+    M.pos=d.pos;M.fx=d.fx;M.preset=null;track=LEG_M.has(ex.m)?'legs':'arms';
     for(const k of PLOT_KEYS)M[k]=d[k];
-    posSeg.replaceWith(posSeg=seg(MECH_POS,M.pos,pv=>{M.pos=pv;draw();}));
-    draw();
-  });
-  let posSeg=seg(MECH_POS,M.pos,v=>{M.pos=v;draw();});
+    posSeg.replaceWith(posSeg=mkPosSeg());
+    paintTg();draw();
+  });el.classList.add('grid2');return el;};
+  const mkPosSeg=()=>seg(MECH_POS,M.pos,v=>{M.pos=v;draw();});
+  let styleSeg=mkStyleSeg(),posSeg=mkPosSeg();
+  /* Technogym presets: a suggestion for this exercise, one tap to apply,
+     and the full catalogue a tap further */
+  const tgBar=h('div',{class:'tg-bar'});
+  function applyPreset(p){
+    Object.assign(M,tgPlot(p,ex));
+    M.preset=p.id;track=p.track;
+    styleSeg.replaceWith(styleSeg=mkStyleSeg());
+    posSeg.replaceWith(posSeg=mkPosSeg());
+    paintTg();draw();
+    toast('Preset applied — '+p.name+' '+tgRatioTxt(p,ex));
+  }
+  function paintTg(){
+    const cur=TG.find(p=>p.id===M.preset),sug=cur?null:tgSuggest(ex)[0];
+    tgBar.replaceChildren(
+      h('span',{class:'badge'},ic('sparkle')),
+      h('div',{class:'grow'},
+        h('div',{class:'bold small'},cur?cur.name:sug?'Suggested: '+sug.name:'Technogym presets'),
+        h('div',{class:'tiny dim'},cur?tgLineName(cur.line)+' · '+tgRatioTxt(cur,ex).replace(' typical','')+' typical — measure for exact'
+          :sug?tgLineName(sug.line)+' · '+tgRatioTxt(sug,ex):'Pre-plotted Selection, Pure Strength & cable machines')),
+      sug?h('button',{class:'btn sm inline tint',style:'flex:0 0 auto;padding:0 12px',onclick:()=>applyPreset(sug)},'Apply'):null,
+      h('button',{class:'btn sm inline',style:'flex:0 0 auto;padding:0 12px',onclick:()=>tgPresetSheet(ex,applyPreset)},cur||sug?'More':'Browse'));
+  }
+  paintTg();
+  /* "Measure it": one rep, two tape readings — how far the hands (or feet)
+     travel and how far the top plate of the stack rises. That ratio IS the
+     machine's leverage, so this turns any plot — or preset — exact. */
+  const mH=h('input',{class:'in num',inputmode:'decimal',placeholder:'cm'});
+  const mR=h('input',{class:'in num',inputmode:'decimal',placeholder:'cm'});
+  const measure=h('details',{class:'info tg-measure'},
+    h('summary',{},ic('ruler'),'Measure it — make the leverage exact'),
+    h('p',{},'Do one slow rep. Measure how far your hands (or feet) travel, and how far the top plate of the stack — or the plates on a sled — rise. Those two numbers ARE the machine’s leverage.'),
+    h('div',{class:'row',style:'gap:8px;align-items:flex-end'},
+      h('div',{class:'grow'},h('span',{class:'lbl',style:'margin-top:4px'},'You moved'),mH),
+      h('div',{class:'grow'},h('span',{class:'lbl',style:'margin-top:4px'},'Weight rose'),mR)),
+    h('button',{class:'btn tint mt8',onclick:()=>{
+      const H=pf(mH.value),R=pf(mR.value);
+      if(!(H>0)||!(R>0)){toast('Enter both distances in cm');return;}
+      const cpu=cmPerUnit(),dx=M.hx1-M.hx0,dy=M.hy1-M.hy0,L=Math.hypot(dx,dy)||1;
+      M.hx1=M.hx0+dx/L*H/cpu;M.hy1=M.hy0+dy/L*H/cpu;
+      M.wx1=M.wx0;M.wy1=M.wy0-R/cpu;
+      if(M.wy1<4){M.wy0+=4-M.wy1;M.wy1=4;}
+      draw();
+      toast('Leverage set to ×'+(R/H).toFixed(2)+' from your measurements');
+    }},ic('check','sm'),'Use these measurements'));
   const uniSeg=seg([['bi','Total load'],['uni','Per side']],uni?'uni':'bi',v=>{uni=v==='uni';draw();});
 
   const readout=h('div',{class:'mech-read'},
@@ -1983,20 +2514,19 @@ function movementSheet(ex,onSaved){
     h('div',{},rEff,h('div',{class:'k'},'≈ free wt')));
 
   const body=h('div',{},
-    h('p',{class:'small dim',style:'margin:2px 2px 10px;line-height:1.5'},
-      'Drag the gold dots to trace where your '+(legs?'feet':'hands')+' travel — the figure reaches for them — and the purple dots to trace how far the load moves. IronLog works out the real load on your muscles from the geometry. Muscles this exercise trains are lit in red.'),
+    tgBar,
+    h('p',{class:'small dim',style:'margin:10px 2px 0;line-height:1.5'},
+      'Or plot it: drag the gold dots along your '+(legs()?'feet':'hands')+'’ path and the purple dots along the load’s. The geometry gives the real load on your muscles.'),
     h('span',{class:'lbl'},'Machine style'),styleSeg,
     h('span',{class:'lbl'},'Body position'),posSeg,
     h('div',{style:'margin-top:12px'},rigWrap),
-    readout,expl,
+    readout,expl,measure,
     h('span',{class:'lbl'},'How you log it'),uniSeg,
     h('p',{class:'tiny dim',style:'margin:6px 2px 0;line-height:1.5'},
       'Pick “per side” when the number you type is what ONE arm or leg moves — a pair of dumbbells (30 kg means 30 in each hand) or a single-arm/single-leg lift. IronLog doubles it for your strength score only.'),
     h('button',{class:'btn primary mt12',onclick:async()=>{
-      const c=plotCalc(M);
-      ex.mech={kind:M.kind,pos:M.pos,fx:Math.round(M.fx*10)/10,
-        ratio:Math.round(c.ratio*1000)/1000,romCm:Math.round(c.romCm),at:Date.now()};
-      for(const k of PLOT_KEYS)ex.mech[k]=Math.round(M[k]*10)/10;
+      // preset + tracked limb are additive fields: 5.7 reads the same mech
+      ex.mech=mechFromPlot(M,M.preset?{preset:M.preset,track}:track!==(LEG_M.has(ex.m)?'legs':'arms')?{track}:{});
       if(uni)ex.uni=1;else delete ex.uni;
       ex.edited=1;
       await dbPut('exercises',ex);
@@ -2004,7 +2534,7 @@ function movementSheet(ex,onSaved){
       toast('Calibrated — '+ex.name+' now counts toward your strength score');
       if(onSaved)onSaved();
     }},'Save calibration'),
-    ex.mech?h('button',{class:'btn danger mt8',onclick:async()=>{
+    ex.mech?h('button',{class:'btn plain danger mt8',onclick:async()=>{
       delete ex.mech;
       await dbPut('exercises',ex);
       close();toast('Calibration removed');
@@ -2107,14 +2637,20 @@ let INTRO_DONE=null;   // kv-backed, cached at boot
 function introCard(){
   if(INTRO_DONE||S.workouts.length>=3)return null;
   const step=(done,icon,txt,fn)=>h('div',{class:'lrow intro-step'+(done?' done':''),onclick:done?null:fn},
-    h('div',{class:'intro-ico'},done?'✓':icon),
+    h('div',{class:'intro-ico'},ic(done?'check':icon)),
     h('div',{class:'grow small'+(done?' dim':'')},txt),
-    done?null:h('span',{class:'dim'},'›'));
+    done?null:h('span',{class:'dim'},ic('chev','sm')));
   return h('section',{class:'card'},
     h('h3',{},'Getting started'),
-    step(S.workouts.length>0,'🏋️','Log a workout — tick sets as you go',startEmpty),
-    step(S.templates.length>0,'📋','Build a template for each training day',()=>switchTab('templates')),
-    step(!!(S.set.sched&&S.set.sched.on),'🗓️','Plan your split — it shows up right here',scheduleSheet),
+    step(S.workouts.length>0,'dumbbell','Log a workout — tick sets as you go',startEmpty),
+    step(S.templates.length>0,'list','Build a template for each training day',()=>switchTab('templates')),
+    step(!!(S.set.sched&&S.set.sched.on),'calendar','Plan your split — it shows up right here',scheduleSheet),
+    // iOS gives a home-screen app its OWN storage, separate from Safari's, so
+    // anyone who logged in Safari first opens the installed app to nothing
+    IS_IOS&&isStandalone()&&!S.workouts.length?h('div',{class:'lrow intro-hint',onclick:pickBackupFile},
+      h('div',{class:'intro-ico'},ic('upload')),
+      h('div',{class:'grow small'},'Used IronLog in Safari before? The home-screen app keeps its own storage — restore a backup to bring your history across.'),
+      h('span',{class:'dim'},ic('chev','sm'))):null,
     h('p',{class:'tiny dim',style:'margin:8px 2px 0'},'Everything lives on this device — no account, no cloud. Records, strength score and recovery build themselves as you log.'),
     h('button',{class:'btn sm mt8',onclick:async()=>{INTRO_DONE=1;await kvPut('introDone',1);renderLog();}},'Got it — hide this'));
 }
@@ -2141,7 +2677,7 @@ function backupNagCard(){
   if(!backupNagDue({workouts:S.workouts.length,last:BK.last,snooze:BK.snooze,now}))return null;
   const d=backupDueDays(now);
   return h('div',{class:'nag'},
-    h('div',{class:'nag-i'},'🛟'),
+    h('div',{class:'nag-i'},ic('shield','lg')),
     h('div',{class:'grow'},
       h('div',{class:'nag-t'},BK.last==null?'Back up your training log':'Your backup is '+d+' days old'),
       h('div',{class:'nag-s'},S.workouts.length+' workouts live only on this device. Browsers can clear app data to free up space — a backup file is what gets it back.')),
@@ -2163,25 +2699,15 @@ function renderLog(){
         g8.name?h('span',{class:'nm'},g8.name):null,g8.punct)));
     const intro=introCard();
     if(intro)pg.append(intro);
+    // today's session outranks everything else — it is the one thing you
+    // most likely opened the app to start
+    pg.append(todayCard());
     const nag=backupNagCard();
     if(nag)pg.append(nag);
-    pg.append(h('section',{class:'card'},
-      h('h3',{},'Workout'),
-      h('button',{class:'btn primary',onclick:startEmpty},'Start Empty Workout')));
-    // today's scheduled session outranks the full template list — it is the
-    // one thing you most likely opened the app to start
-    const sc=scheduleCard();
-    if(sc)pg.append(sc);
-    const tpls=[...S.templates].sort((a,b)=>a.pos-b.pos);
-    if(tpls.length){
-      pg.append(h('section',{class:'card'},h('h3',{},'Start from template'),
-        tpls.map(t=>h('div',{class:'lrow'},
-          h('div',{class:'grow'},h('div',{class:'bold'},t.name),h('div',{class:'tiny dim'},tplSummary(t))),
-          h('button',{class:'btn sm inline primary',onclick:()=>startFromTemplate(t)},'Start')))));
-    }else if(!S.workouts.length){
-      pg.append(h('div',{class:'empty'},h('div',{class:'big'},'🏋️'),
-        h('p',{},'Start a workout, add exercises, and every set you log builds your history, records and progress charts — all saved on this device.')));
-    }
+    const wk=weekCard();
+    if(wk)pg.append(wk);
+    const tp=templatesCard();
+    if(tp)pg.append(tp);
     const crc=cardioRecCard();
     if(crc)pg.append(crc);
     const prb=prBoardCard();
@@ -2194,38 +2720,128 @@ function renderLog(){
     return;
   }
   const a=S.active;
-  pg.append(h('section',{class:'card'},
-    h('div',{class:'row'},
-      h('div',{class:'grow bold',style:'font-size:16.5px'},a.name),
-      h('button',{class:'icon-btn',style:'width:40px;height:40px',onclick:woMenu},
-        h('span',{style:'font-size:22px;letter-spacing:1px;color:var(--dim)'},'···'))),
-    a.notes?h('div',{class:'note-pill'},a.notes):null,
-    h('div',{class:'row mt8'},
-      h('div',{class:'grow'},
-        h('div',{class:'wo-top'},h('div',{class:'t num',id:'wo-dur'},fmtDur((Date.now()-a.startedAt)/1000))),
+  // the clock, the tally and Finish stay pinned while you scroll the session;
+  // in 5.7 they scrolled away with the first card
+  pg.append(h('section',{class:'wo-bar'},
+    h('div',{class:'wo-bar-row'},
+      h('div',{class:'wo-time num',id:'wo-dur'},fmtDur((Date.now()-a.startedAt)/1000)),
+      h('div',{class:'wo-info'},
+        h('div',{class:'wo-name'},a.name),
         h('div',{class:'wo-stats'},
-          h('span',{},h('b',{id:'wo-sets',class:'num'},'0'),' sets'),
+          h('span',{},h('b',{id:'wo-sets',class:'num'},'0'),'/',h('span',{id:'wo-total',class:'num'},'0'),' sets'),
           h('span',{},h('b',{id:'wo-vol',class:'num'},'0'),' '+S.set.unit),
-          h('span',{id:'wo-cd-wrap',style:'display:none'},h('b',{id:'wo-cd',class:'num'},'0'),' min cardio'))),
-      h('button',{class:'btn green inline',style:'min-height:48px',onclick:finishWorkout},'Finish'))));
+          h('span',{id:'wo-cd-wrap',style:'display:none'},h('b',{id:'wo-cd',class:'num'},'0'),' min'))),
+      h('button',{class:'icon-btn','aria-label':'Workout options',onclick:woMenu},ic('more')),
+      h('button',{class:'btn green inline',onclick:finishWorkout},'Finish')),
+    h('div',{class:'wo-prog'},h('div',{id:'wo-prog'}))));
+  if(a.notes)pg.append(h('div',{class:'note-pill',style:'margin:-2px 0 12px'},ic('note','sm'),h('span',{},a.notes)));
   a.exs.forEach((en,i)=>pg.append(exCard(i)));
   pg.append(
-    h('button',{class:'btn primary',onclick:()=>pickExercises({onDone:ids=>{ids.forEach(id=>addExerciseToActive(id));renderLog();}})},'+ Add Exercises'),
-    h('button',{class:'btn danger mt8',onclick:discardFlow},'Discard Workout'));
+    h('button',{class:'btn primary',onclick:()=>pickExercises({onDone:ids=>{ids.forEach(id=>addExerciseToActive(id));renderLog();}})},ic('plus'),'Add exercises'),
+    h('button',{class:'btn plain danger mt8',onclick:discardFlow},'Discard workout'));
   updateWoStats();
 }
 function updateWoStats(){
   if(!S.active)return;
-  let sets=0,vol=0,cd=0;
+  let sets=0,total=0,vol=0,cd=0;
   for(const en of S.active.exs){
     const ex=S.ex.get(en.exId);
-    for(const st of en.sets)if(st.done){sets++;if(st.t!=='W')vol+=workLoad(ex,st)*(st.r||0);if(st.dur)cd+=st.dur;}
+    for(const st of en.sets){
+      total++;
+      if(st.done){sets++;if(st.t!=='W')vol+=workLoad(ex,st)*(st.r||0);if(st.dur)cd+=st.dur;}
+    }
   }
-  const se=$('#wo-sets'),ve=$('#wo-vol'),ce=$('#wo-cd'),cw=$('#wo-cd-wrap');
+  const se=$('#wo-sets'),ve=$('#wo-vol'),ce=$('#wo-cd'),cw=$('#wo-cd-wrap'),te=$('#wo-total'),pb=$('#wo-prog');
   if(se)se.textContent=sets;
+  if(te)te.textContent=total;
+  if(pb)pb.style.width=(total?Math.round(sets/total*100):0)+'%';
   if(ve)ve.textContent=fmtVol(vol);
   if(ce)ce.textContent=Math.round(cd);
   if(cw)cw.style.display=cd>0?'':'none';
+}
+// per-exercise progress chip: "2/3", then a green "Done" once every set is in
+function exProgEl(en){
+  const total=en.sets.length,done=en.sets.filter(s2=>s2.done).length;
+  return total&&done===total
+    ?h('span',{class:'ex-prog done'},ic('check'),'Done')
+    :h('span',{class:'ex-prog num'},done+'/'+total);
+}
+/* ---- Log home cards ---- */
+/* Today first. With a schedule it names the session and starts it in one tap;
+   without one it is simply the way in. Replaces 5.7's separate "Workout" and
+   "Today's plan" cards, which split one decision across two boxes and gave
+   "Start Empty Workout" top billing on the day a template was planned. */
+function todayCard(){
+  const s=schedNorm(S.set.sched),on=!!(s&&s.on);
+  const today=on?schedFor(Date.now()):null,tom=on?schedFor(Date.now()+864e5):null;
+  const card=h('section',{class:'card hero'});
+  const plan=h('button',{class:'link',onclick:scheduleSheet},on?'Edit plan':'Plan your week',ic('chev','sm'));
+  const foot=h('div',{class:'hero-f'},h('span',{},...(tom?['Tomorrow: ',h('b',{},schedLabel(tom))]:[on?'':'No training plan yet'])),plan);
+  if(!today){
+    card.append(h('div',{class:'hero-eb'},ic('bolt','sm'),'Quick start'),
+      h('div',{class:'hero-s',style:'margin:8px 0 14px'},S.templates.length
+        ?'Start from scratch, or pick one of your templates below.'
+        :'Start from scratch — add exercises as you go.'),
+      h('button',{class:'btn primary lg',onclick:startEmpty},ic('play'),'Start empty workout'),foot);
+    return card;
+  }
+  if(trainedOn(Date.now())){
+    card.append(h('div',{class:'hero-eb'},ic('check','sm'),'Today'),
+      h('div',{class:'hero-t'},'Done for today'),
+      h('div',{class:'hero-s'},'Nice work — today is in the book.'),
+      h('button',{class:'btn tint',onclick:startEmpty},ic('plus'),'Start another workout'),foot);
+  }else if(today.day.rest){
+    card.append(h('div',{class:'hero-eb'},ic('calendar','sm'),'Today'),
+      h('div',{class:'hero-t rest'},'Rest day'),
+      h('div',{class:'hero-s'},'Scheduled rest — recovery is where the adaptation happens.'),
+      h('button',{class:'btn tint',onclick:startEmpty},ic('play','sm'),'Train anyway'),foot);
+  }else{
+    const tpl=today.tpl;
+    card.append(h('div',{class:'hero-eb'},ic('calendar','sm'),'Today’s session'),
+      h('div',{class:'hero-t'},schedLabel(today)),
+      h('div',{class:'hero-s'},tpl?tplSummary(tpl):'No template linked to this day yet — tap Edit plan to link one.'),
+      h('button',{class:'btn primary lg',onclick:tpl?()=>startFromTemplate(tpl):startEmpty},
+        ic('play'),tpl?'Start '+tpl.name:'Start empty workout'),foot);
+  }
+  return card;
+}
+// Monday-first week: which days you trained, and the week's tally so far
+function weekStats(now){
+  const d0=new Date(now);d0.setHours(0,0,0,0);
+  const todayIdx=(d0.getDay()+6)%7,wkStart=d0.getTime()-todayIdx*864e5;
+  const days=Array(7).fill(false);let n=0,sec=0,vol=0;
+  for(const w of S.workouts){
+    const di=daysBetween(wkStart,w.finishedAt);
+    if(di<0||di>6)continue;
+    days[di]=true;n++;sec+=w.dur||0;vol+=workoutVolume(w);
+  }
+  return {days,n,sec,vol,todayIdx};
+}
+function weekCard(){
+  if(!S.workouts.length)return null;
+  const ws=weekStats(Date.now());
+  const stat=(v,k)=>h('div',{class:'wk-stat'},h('div',{class:'v num'},v),h('div',{class:'k'},k));
+  return h('section',{class:'card'},
+    h('div',{class:'card-h'},h('span',{class:'badge'},ic('flame')),h('h3',{},'This week'),
+      h('button',{class:'link',onclick:()=>switchTab('history')},'History',ic('chev','sm'))),
+    h('div',{class:'wk-days'},WEEKDAYS.map((d,i)=>h('div',{class:'wk-day'+(ws.days[i]?' on':'')+(i===ws.todayIdx?' today':'')},
+      h('span',{class:'wk-dot'},ws.days[i]?ic('check'):null),h('span',{class:'wk-d'},d.charAt(0))))),
+    h('div',{class:'wk-stats'},
+      stat(String(ws.n),ws.n===1?'Workout':'Workouts'),
+      stat(ws.sec?fmtMin(ws.sec/60):'0 min','Training'),
+      stat(fmtVol(ws.vol)+' '+S.set.unit,'Volume')));
+}
+function templatesCard(){
+  const tpls=[...S.templates].sort((a,b)=>(a.pos||0)-(b.pos||0));
+  if(!tpls.length)return null;
+  return h('section',{class:'card'},
+    h('div',{class:'card-h'},h('span',{class:'badge'},ic('list')),h('h3',{},'Templates'),
+      h('button',{class:'link',onclick:()=>switchTab('templates')},'Manage',ic('chev','sm'))),
+    tpls.slice(0,6).map(t=>h('div',{class:'lrow',style:'padding:10px 2px'},
+      h('div',{class:'grow'},h('div',{class:'bold'},t.name),h('div',{class:'tiny dim'},tplSummary(t))),
+      h('button',{class:'round-btn','aria-label':'Start '+t.name,onclick:()=>startFromTemplate(t)},ic('play')))),
+    tpls.length>6?h('button',{class:'link',style:'margin-top:4px',onclick:()=>switchTab('templates')},
+      '+'+(tpls.length-6)+' more',ic('chev','sm')):null);
 }
 
 /* ----- exercise card + set rows ----- */
@@ -2233,22 +2849,23 @@ function exCard(i){
   const en=S.active.exs[i],ex=S.ex.get(en.exId),p=S.prev[en.exId];
   const cd=isCardio(ex);
   const card=h('section',{class:'card',id:'exc'+i});
-  card.append(h('div',{class:'row'},
+  card.append(h('div',{class:'ex-h'},
     h('div',{class:'grow'},
       h('div',{class:'exname'},ex?ex.name:'Unknown exercise'),
       h('div',{class:'exsub'},(ex?ex.m+' · '+ex.e+(ex.e==='Bodyweight'?' (+BW counted)':'')
       +(ex&&mechSummary(ex)?' · '+mechSummary(ex):''):'')+(p?'   ·   last done '+fmtDateShort(p.date):'')),
     ),
-    h('button',{class:'icon-btn',style:'width:40px;height:40px',onclick:()=>exMenu(i)},
-      h('span',{style:'font-size:22px;letter-spacing:1px;color:var(--dim)'},'···'))));
-  if(ex&&ex.pin)card.append(h('div',{class:'pin-note',onclick:()=>pinSheet(ex,i)},'📌 '+ex.pin));
-  if(en.notes)card.append(h('div',{class:'note-pill'},'📝 '+en.notes));
+    exProgEl(en),
+    h('button',{class:'icon-btn','aria-label':'Exercise options',style:'width:38px;height:38px;margin:-3px -6px 0 0',onclick:()=>exMenu(i)},ic('more'))));
+  if(ex&&ex.pin)card.append(h('div',{class:'pin-note',onclick:()=>pinSheet(ex,i)},ic('pin','sm'),h('span',{},ex.pin)));
+  if(en.notes)card.append(h('div',{class:'note-pill'},ic('note','sm'),h('span',{},en.notes)));
   const grid=h('div',{class:'setgrid'},
     h('div',{class:'sethead'},h('span',{},'Set'),h('span',{},'Prev'),
       h('span',{},cd?'Min':(S.set.unit+(ex&&ex.uni?'/side':''))),h('span',{},cd?distUnit():'Reps'),h('span',{},'RPE'),h('span',{},'✓')));
   en.sets.forEach((st,j)=>grid.append(setRow(i,j)));
   card.append(grid,h('div',{class:'addset-row'},
-    h('button',{class:'btn sm',onclick:()=>{en.sets.push(newSet());saveActive();replaceCard(i);}},cd?'+ Add Interval':'+ Add Set')));
+    h('button',{class:'btn sm tint',onclick:()=>{en.sets.push(newSet());saveActive();replaceCard(i);updateWoStats();}},
+      ic('plus','sm'),cd?'Add interval':'Add set')));
   return card;
 }
 function replaceCard(i){
@@ -2398,21 +3015,26 @@ function toggleDone(i,j,row,in1,in2){
     // thing stopping a later set from being one
     recheckPRs(en.exId,st,row);
   }
-  updateWoStats();saveActive();
+  const chip=row.closest('.card')&&row.closest('.card').querySelector('.ex-prog');
+  if(chip)chip.replaceWith(exProgEl(en));
+  // a ticked set is written NOW, not after the debounce: an iOS 27 home-screen
+  // app can be frozen without any hide event firing first
+  updateWoStats();flushActive();
 }
 function setTypeMenu(i,j){
   const en=S.active.exs[i],st=en.sets[j];
-  const opt=(t,label)=>h('button',{class:'btn mt8'+(st.t===t?' primary':''),onclick:()=>{
-    st.t=t;recheckPRs(en.exId);saveActive();close();replaceCard(i);
-  }},label);
-  const close=sheet('Set type',h('div',{},
-    opt('N','Normal'),opt('W','Warm-up'),opt('D','Drop set'),opt('F','Failure'),
-    h('p',{class:'tiny dim',style:'margin:8px 2px 0'},'Warm-ups are excluded from volume, records and PRs.'),
-    h('button',{class:'btn danger mt12',onclick:()=>{
+  const opt=(t,label,icon,sub)=>({icon,label,sub,on:st.t===t,val:st.t===t?ic('check'):null,
+    fn:()=>{st.t=t;recheckPRs(en.exId);saveActive();replaceCard(i);}});
+  menuSheet('Set type',[
+    [opt('N','Normal','dumbbell'),
+     opt('W','Warm-up','flame','Left out of volume, records and PRs'),
+     opt('D','Drop set','down'),
+     opt('F','Failure','bolt')],
+    [{icon:'trash',label:'Delete set',danger:true,fn:()=>{
       en.sets.splice(j,1);
       if(!en.sets.length)en.sets.push(newSet());
-      recheckPRs(en.exId);saveActive();close();replaceCard(i);
-    }},'Delete set')));
+      recheckPRs(en.exId);saveActive();replaceCard(i);updateWoStats();
+    }}]]);
 }
 
 /* ----- PR detection (live, while logging) ----- */
@@ -2556,26 +3178,28 @@ function bestWeightGuess(en){
 function exMenu(i){
   const en=S.active.exs[i],ex=S.ex.get(en.exId);
   const cd=isCardio(ex);
-  const mk=(label,fn,cls)=>h('button',{class:'btn mt8'+(cls?' '+cls:''),onclick:()=>{close();fn();}},label);
-  const close=sheet(ex?ex.name:'Exercise',h('div',{},
-    mk('Setup note — machine · form · gear',()=>pinSheet(ex,i)),
-    mk('Session note (this workout only)',()=>noteSheet(en,i)),
-    mk('Rest timer for this exercise',()=>restOverrideSheet(ex)),
-    cd?null:mk('Plate calculator',()=>plateSheet(bestWeightGuess(en),ex)),
-    cd?null:mk('Warm-up calculator',()=>warmupSheet(i)),
-    cd?null:mk((isCalibrated(ex)?'Edit':'Plot')+' movement & leverage',
-      ()=>movementSheet(ex,()=>{if(S.tab==='log'&&S.active)renderLog();else renderTab();})),
-    mk('Substitute exercise',()=>substituteSheet(i)),
-    mk('Edit exercise (name · muscles · type)',()=>editExerciseSheet(ex,()=>{if(S.tab==='log'&&S.active)renderLog();else renderTab();})),
-    i>0?mk('Move up',()=>{const x=S.active.exs;[x[i-1],x[i]]=[x[i],x[i-1]];saveActive();renderLog();}):null,
-    i<S.active.exs.length-1?mk('Move down',()=>{const x=S.active.exs;[x[i+1],x[i]]=[x[i],x[i+1]];saveActive();renderLog();}):null,
-    mk('Remove exercise',async()=>{
+  const reload=()=>{if(S.tab==='log'&&S.active)renderLog();else renderTab();};
+  const swap=d=>()=>{const x=S.active.exs;[x[i+d],x[i]]=[x[i],x[i+d]];saveActive();renderLog();};
+  menuSheet(ex?ex.name:'Exercise',[
+    [{icon:'pin',label:'Setup note',sub:ex&&ex.pin?ex.pin:'Seat, grip, gear — shown every session',fn:()=>pinSheet(ex,i)},
+     {icon:'note',label:'Session note',sub:en.notes||'This workout only',fn:()=>noteSheet(en,i)}],
+    [{icon:'timer',label:'Rest timer',val:fmtClock(ex&&ex.restSec!=null?ex.restSec:S.set.restSec),
+       sub:ex&&ex.restSec!=null?'Set for this exercise':'Your default',fn:()=>restOverrideSheet(ex)},
+     cd?null:{icon:'calc',label:'Plate calculator',fn:()=>plateSheet(bestWeightGuess(en),ex)},
+     cd?null:{icon:'ramp',label:'Warm-up calculator',fn:()=>warmupSheet(i)},
+     cd?null:{icon:'plot',label:(isCalibrated(ex)?'Edit':'Plot')+' movement & leverage',
+       sub:isCalibrated(ex)?mechSummary(ex):'Brings a machine into your strength score',fn:()=>movementSheet(ex,reload)}],
+    [{icon:'swap',label:'Substitute exercise',fn:()=>substituteSheet(i)},
+     {icon:'edit',label:'Edit exercise',sub:'Name · muscles · equipment',fn:()=>editExerciseSheet(ex,reload)},
+     i>0?{icon:'up',label:'Move up',fn:swap(-1)}:null,
+     i<S.active.exs.length-1?{icon:'down',label:'Move down',fn:swap(1)}:null],
+    [{icon:'trash',label:'Remove exercise',danger:true,fn:async()=>{
       if(await ask('Remove '+(ex?ex.name:'exercise')+'?','Sets logged for it in this workout will be lost.','Remove',true)){
         // forget its sets' bests too, or re-adding the lift would be judged
         // against numbers that no longer exist
         S.active.exs.splice(i,1);recheckPRs(en.exId);saveActive();renderLog();
       }
-    },'danger')));
+    }}]]);
 }
 function noteSheet(en,i){
   const ta=h('textarea',{class:'in',placeholder:'e.g. left shoulder twinge, cut it short…'},en.notes||'');
@@ -2692,7 +3316,7 @@ function warmupSheet(i){
     h('button',{class:'btn primary mt12',onclick:()=>{
       if(!scheme.length)return;
       en.sets.unshift(...scheme.map(s2=>({t:'W',w:s2.w,r:s2.r,rpe:null,done:false})));
-      saveActive();close();replaceCard(i);toast('Warm-up sets added');
+      saveActive();close();replaceCard(i);updateWoStats();toast('Warm-up sets added');
     }},'Add as warm-up sets')));
   calc();
 }
@@ -2733,22 +3357,20 @@ function substituteSheet(i){
 }
 function woMenu(){
   const a=S.active;
-  const mk=(label,fn,cls)=>h('button',{class:'btn mt8'+(cls?' '+cls:''),onclick:()=>{close();fn();}},label);
-  const close=sheet(a.name,h('div',{},
-    mk('Rename workout',()=>{
+  const tpl=a.tplId?S.templates.find(t=>t.id===a.tplId):null;
+  menuSheet(a.name,[
+    [{icon:'edit',label:'Rename workout',fn:()=>{
       const inp=h('input',{class:'in',value:a.name});
       const cl2=sheet('Rename',h('div',{},inp,
         h('button',{class:'btn primary mt12',onclick:()=>{a.name=inp.value.trim()||a.name;saveActive();cl2();renderLog();}},'Save')));
-    }),
-    mk('Workout notes',()=>{
+    }},
+     {icon:'note',label:'Workout notes',sub:a.notes||'How it’s going, anything to remember',fn:()=>{
       const ta=h('textarea',{class:'in',placeholder:'Notes for this session…'},a.notes||'');
       const cl2=sheet('Workout notes',h('div',{},ta,
         h('button',{class:'btn primary mt12',onclick:()=>{a.notes=ta.value.trim();saveActive();cl2();renderLog();}},'Save')));
-    }),
-    a.tplId&&S.templates.some(t=>t.id===a.tplId)
-      ?mk('Save changes to template',saveActiveToTemplate)
-      :null,
-    mk('Discard workout',discardFlow,'danger')));
+    }},
+     tpl?{icon:'list',label:'Save changes to template',sub:'Update “'+tpl.name+'” to match this session',fn:saveActiveToTemplate}:null],
+    [{icon:'trash',label:'Discard workout',danger:true,fn:discardFlow}]]);
 }
 async function discardFlow(){
   if(await ask('Discard workout?','All sets logged in this session will be lost.','Discard',true)){
@@ -2892,6 +3514,7 @@ const RT={on:false,endsAt:0,total:0,int:null,label:'',alarm:null};
 function startRest(sec,label){
   if(!sec||sec<=0)return;
   RT.on=true;RT.endsAt=Date.now()+sec*1000;RT.total=sec;RT.label=label||'';
+  const lb=$('#rt-lbl');if(lb)lb.textContent=RT.label?'Rest · '+RT.label:'Rest';
   const p=$('#restpill');
   p.classList.remove('donefx');p.classList.add('show');
   if(!RT.int)RT.int=setInterval(tickRest,200);
@@ -2920,6 +3543,7 @@ function restDone(){
   const p=$('#restpill');
   p.classList.add('donefx');
   $('#rt-time').textContent='Go!';
+  const lb=$('#rt-lbl');if(lb)lb.textContent='Time for your next set';
   setTimeout(()=>{if(!RT.on)p.classList.remove('show','donefx');},2400);
 }
 function adjustRest(d){
@@ -3009,20 +3633,22 @@ async function notifyRestDone(label,force){
    ========================================================================== */
 function renderTemplates(){
   const pg=$('#page-templates');pg.replaceChildren();
-  pg.append(h('button',{class:'btn primary',style:'margin-bottom:12px',onclick:()=>tplEditor(null)},'+ New Template'));
   const tpls=[...S.templates].sort((a,b)=>(a.pos||0)-(b.pos||0));
   if(!tpls.length){
-    pg.append(h('div',{class:'empty'},h('div',{class:'big'},'📋'),
-      h('p',{},'A template is a reusable workout plan — an ordered list of exercises with target sets × reps. Create one here, or finish a workout and save it as a template.')));
+    pg.append(h('div',{class:'empty'},h('div',{class:'big'},ic('list')),
+      h('p',{},'A template is a reusable workout plan — an ordered list of exercises with target sets × reps. Create one here, or finish a workout and save it as a template.'),
+      h('button',{class:'btn primary mt12',onclick:()=>tplEditor(null)},ic('plus'),'Create a template')));
     return;
   }
   for(const t of tpls){
+    const nSets=t.exs.reduce((n,te)=>n+(te.sets||1),0);
     pg.append(h('section',{class:'card'},
       h('div',{class:'row'},
-        h('div',{class:'grow bold',style:'font-size:16px'},t.name),
-        h('button',{class:'btn sm inline primary',onclick:()=>startFromTemplate(t)},'Start'),
-        h('button',{class:'icon-btn',style:'width:40px;height:40px',onclick:()=>tplMenu(t)},
-          h('span',{style:'font-size:22px;letter-spacing:1px;color:var(--dim)'},'···'))),
+        h('div',{class:'grow'},
+          h('div',{class:'bold',style:'font-size:17px;letter-spacing:-.2px'},t.name),
+          h('div',{class:'tiny dim'},t.exs.length+' exercise'+(t.exs.length===1?'':'s')+' · '+nSets+' set'+(nSets===1?'':'s'))),
+        h('button',{class:'btn sm inline tint',onclick:()=>startFromTemplate(t)},ic('play','sm'),'Start'),
+        h('button',{class:'icon-btn','aria-label':'Template options',style:'width:40px;height:40px',onclick:()=>tplMenu(t)},ic('more'))),
       h('div',{class:'mt8'},t.exs.map(te=>{
         const x=S.ex.get(te.exId);
         if(isCardio(x))return h('div',{class:'hist-line'},
@@ -3034,25 +3660,27 @@ function renderTemplates(){
           (x?x.name:'?')+(te.w!=null?' — '+fmtW(te.w)+' '+S.set.unit:'')+(te.rpe!=null?' @ '+te.rpe:''));
       }))));
   }
+  pg.append(h('button',{class:'btn tint',onclick:()=>tplEditor(null)},ic('plus'),'New template'));
 }
 function tplMenu(t){
-  const mk=(label,fn,cls)=>h('button',{class:'btn mt8'+(cls?' '+cls:''),onclick:()=>{close();fn();}},label);
-  const close=sheet(t.name,h('div',{},
-    mk('Edit',()=>tplEditor(t)),
-    mk('Duplicate',async()=>{
+  const tpls=[...S.templates].sort((a,b)=>(a.pos||0)-(b.pos||0)),at=tpls.indexOf(t);
+  menuSheet(t.name,[
+    [{icon:'play',label:'Start workout',fn:()=>startFromTemplate(t)},
+     {icon:'edit',label:'Edit template',fn:()=>tplEditor(t)},
+     {icon:'copy',label:'Duplicate',fn:async()=>{
       const c=JSON.parse(JSON.stringify(t));
       c.id=uid();c.name=t.name+' (copy)';c.pos=Math.max(0,...S.templates.map(x=>x.pos||0))+1;
       S.templates.push(c);await dbPut('templates',c);renderTemplates();
-    }),
-    mk('Move up',()=>moveTpl(t,-1)),
-    mk('Move down',()=>moveTpl(t,1)),
-    mk('Delete',async()=>{
+    }}],
+    [at>0?{icon:'up',label:'Move up',fn:()=>moveTpl(t,-1)}:null,
+     at<tpls.length-1?{icon:'down',label:'Move down',fn:()=>moveTpl(t,1)}:null],
+    [{icon:'trash',label:'Delete template',danger:true,fn:async()=>{
       if(await ask('Delete '+t.name+'?','This template will be removed. Past workouts are not affected.','Delete',true)){
         await dbDel('templates',t.id);
         S.templates=S.templates.filter(x=>x.id!==t.id);
         renderTemplates();
       }
-    },'danger')));
+    }}]]);
 }
 async function moveTpl(t,dir){
   const tpls=[...S.templates].sort((a,b)=>(a.pos||0)-(b.pos||0));
@@ -3084,30 +3712,30 @@ function tplEditor(orig){
       return h('div',{style:'border-bottom:1px solid var(--line);padding:10px 0'},
         h('div',{class:'row'},
           h('div',{class:'grow bold'},x?x.name:'?'),
-          h('button',{class:'icon-btn',style:'width:38px;height:38px',onclick:()=>rowMenu(i)},
-            h('span',{style:'font-size:20px;color:var(--dim)'},'···'))),
+          h('button',{class:'icon-btn','aria-label':'Exercise options',style:'width:38px;height:38px',onclick:()=>rowMenu(i)},ic('more'))),
         h('div',{class:'row mt8'},
           cd?[f('sets','Intervals',true),f('dur','Min'),f('dist',distUnit())]
             :[f('sets','Sets',true),f('reps','Reps',true),f('w',S.set.unit),f('rpe','RPE')]));
     }));
   }
   function rowMenu(i){
-    const mk=(label,fn,cls)=>h('button',{class:'btn mt8'+(cls?' '+cls:''),onclick:()=>{cl2();fn();refresh();}},label);
-    const cl2=sheet('Exercise',h('div',{},
-      i>0?mk('Move up',()=>{[tp.exs[i-1],tp.exs[i]]=[tp.exs[i],tp.exs[i-1]];}):null,
-      i<tp.exs.length-1?mk('Move down',()=>{[tp.exs[i+1],tp.exs[i]]=[tp.exs[i],tp.exs[i+1]];}):null,
-      mk('Remove',()=>{tp.exs.splice(i,1);},'danger')));
+    const x=S.ex.get(tp.exs[i].exId);
+    const then=fn=>()=>{fn();refresh();};
+    menuSheet(x?x.name:'Exercise',[
+      [i>0?{icon:'up',label:'Move up',fn:then(()=>{[tp.exs[i-1],tp.exs[i]]=[tp.exs[i],tp.exs[i-1]];})}:null,
+       i<tp.exs.length-1?{icon:'down',label:'Move down',fn:then(()=>{[tp.exs[i+1],tp.exs[i]]=[tp.exs[i],tp.exs[i+1]];})}:null],
+      [{icon:'trash',label:'Remove from template',danger:true,fn:then(()=>{tp.exs.splice(i,1);})}]]);
   }
   const close=sheet(orig?'Edit template':'New template',h('div',{},
     h('span',{class:'lbl'},'Name'),nameIn,
     h('span',{class:'lbl'},'Exercises'),list,
-    h('button',{class:'btn mt12',onclick:()=>pickExercises({onDone:ids=>{
+    h('button',{class:'btn tint mt12',onclick:()=>pickExercises({onDone:ids=>{
       ids.forEach(id=>{
         const x=S.ex.get(id);
         tp.exs.push(isCardio(x)?{exId:id,sets:1,dur:20,dist:null}:{exId:id,sets:3,reps:8,w:null,rpe:null});
       });
       refresh();
-    }})},'+ Add Exercises'),
+    }})},ic('plus'),'Add exercises'),
     h('button',{class:'btn primary mt8',onclick:async()=>{
       tp.name=nameIn.value.trim()||'Template';
       if(!tp.exs.length){toast('Add at least one exercise');return;}
@@ -3127,35 +3755,46 @@ function renderHistory(){
   const pg=$('#page-history');pg.replaceChildren();
   const ws=workoutsDesc();
   if(!ws.length){
-    pg.append(h('div',{class:'empty'},h('div',{class:'big'},'📅'),
-      h('p',{},'Finished workouts appear here with duration, volume and every set — tap one to review, repeat or delete it.')));
+    pg.append(h('div',{class:'empty'},h('div',{class:'big'},ic('clock')),
+      h('p',{},'Finished workouts appear here with duration, volume and every set — tap one to review, repeat, edit or delete it.')));
     return;
   }
   const shown=ws.slice(0,histLimit);
-  let lastMonth='';
+  // month headers carry the month's tally, counted over ALL workouts so a
+  // paginated list never under-reports the month it is cut off in
+  const mk=ts=>{const d=new Date(ts);return d.getFullYear()*12+d.getMonth();};
+  const tally={};
+  for(const w of ws){const t=tally[mk(w.finishedAt)]||(tally[mk(w.finishedAt)]={n:0,sec:0});t.n++;t.sec+=w.dur||0;}
+  let lastMonth=null;
   for(const w of shown){
-    const mo=new Date(w.finishedAt).toLocaleDateString(undefined,{month:'long',year:'numeric'});
-    if(mo!==lastMonth){pg.append(h('span',{class:'lbl'},mo));lastMonth=mo;}
+    const m=mk(w.finishedAt);
+    if(m!==lastMonth){
+      const t=tally[m];
+      pg.append(h('div',{class:'hist-mo'},
+        h('span',{class:'lbl'},new Date(w.finishedAt).toLocaleDateString(undefined,{month:'long',year:'numeric'})),
+        h('span',{class:'tiny dim'},t.n+' workout'+(t.n===1?'':'s')+' · '+fmtMin(t.sec/60))));
+      lastMonth=m;
+    }
     const prCount=w.exs.reduce((n,en)=>n+en.sets.filter(s2=>s2.pr).length,0);
-    pg.append(h('section',{class:'card',onclick:()=>workoutSheet(w)},
+    pg.append(h('section',{class:'card hist-card',onclick:()=>workoutSheet(w)},
       h('div',{class:'row'},
         h('div',{class:'grow'},
-          h('div',{class:'bold',style:'font-size:15.5px'},w.name),
+          h('div',{class:'bold',style:'font-size:16px;letter-spacing:-.2px'},w.name),
           h('div',{class:'tiny dim'},fmtDate(w.finishedAt)+' · '+fmtTime(w.finishedAt))),
-        prCount?h('div',{style:'color:var(--gold);font-weight:700;font-size:13px'},'🏆 '+prCount):null),
-      h('div',{class:'wo-stats',style:'margin:7px 0 9px'},
-        h('span',{},h('b',{class:'num'},fmtDur(w.dur)),''),
+        prCount?h('div',{class:'pr-pill'},ic('trophy','sm'),String(prCount)):null),
+      h('div',{class:'wo-stats',style:'margin:8px 0 9px'},
+        h('span',{},ic('clock','sm'),h('b',{class:'num'},fmtDur(w.dur))),
         // cardio-only sessions have no tonnage — show minutes, not "0 kg"
-        (v=>v>0?h('span',{},h('b',{class:'num'},fmtVol(v)),' '+S.set.unit)
-          :(cm=>cm>0?h('span',{},h('b',{class:'num'},Math.round(cm)),' min cardio'):null)(workoutCardioMin(w)))(workoutVolume(w)),
-        h('span',{},h('b',{class:'num'},workoutSets(w)),' sets')),
+        (v=>v>0?h('span',{},ic('dumbbell','sm'),h('b',{class:'num'},fmtVol(v)),' '+S.set.unit)
+          :(cm=>cm>0?h('span',{},ic('run','sm'),h('b',{class:'num'},Math.round(cm)),' min cardio'):null)(workoutCardioMin(w)))(workoutVolume(w)),
+        h('span',{},ic('list','sm'),h('b',{class:'num'},workoutSets(w)),' sets')),
       w.exs.slice(0,4).map(en=>{
         const x=S.ex.get(en.exId);
         return h('div',{class:'hist-line'},h('b',{},en.sets.length+' × '),(x?x.name:'?')+topLine(en,x));
       }),
       w.exs.length>4?h('div',{class:'hist-line dim'},'+'+(w.exs.length-4)+' more'):null));
   }
-  if(ws.length>shown.length)pg.append(h('button',{class:'btn mt8',
+  if(ws.length>shown.length)pg.append(h('button',{class:'btn tint mt8',
     onclick:()=>{histLimit+=120;renderHistory();}},
     'Show older workouts ('+(ws.length-shown.length)+' more)'));
 }
@@ -3186,14 +3825,18 @@ function setLine(st){
 function workoutSheet(w){
   const c=h('div');
   const wv=workoutVolume(w),wcm=workoutCardioMin(w);
-  c.append(h('p',{class:'small dim',style:'margin:0 2px 6px'},
-    fmtDate(w.finishedAt)+' · '+fmtTime(w.finishedAt)+' · '+fmtDur(w.dur)
-    +(wv>0?' · '+fmtVol(wv)+' '+S.set.unit:wcm>0?' · '+Math.round(wcm)+' min cardio':'')));
-  if(w.notes)c.append(h('div',{class:'note-pill'},w.notes));
+  const prs=w.exs.reduce((n,en)=>n+en.sets.filter(s2=>s2.pr).length,0);
+  c.append(h('p',{class:'small dim',style:'margin:0 2px 10px'},fmtDate(w.finishedAt)+' · '+fmtTime(w.finishedAt)),
+    h('div',{class:'statgrid',style:'grid-template-columns:repeat(3,1fr);margin-top:0'},
+      h('div',{},h('div',{class:'v num'},fmtDur(w.dur)),h('div',{class:'k'},'Duration')),
+      wv>0||!wcm?h('div',{},h('div',{class:'v num'},fmtVol(wv)),h('div',{class:'k'},'Volume · '+S.set.unit))
+        :h('div',{},h('div',{class:'v num'},String(Math.round(wcm))),h('div',{class:'k'},'Cardio min')),
+      h('div',{},h('div',{class:'v num'},prs?String(prs):'—'),h('div',{class:'k'},'PRs'))));
+  if(w.notes)c.append(h('div',{class:'note-pill'},ic('note','sm'),h('span',{},w.notes)));
   for(const en of w.exs){
     const x=S.ex.get(en.exId);
-    c.append(h('div',{class:'bold',style:'color:var(--acc);margin:14px 2px 4px'},x?x.name:'?'));
-    if(en.notes)c.append(h('div',{class:'tiny dim',style:'margin:0 2px 4px'},'📝 '+en.notes));
+    c.append(h('div',{class:'bold',style:'color:var(--acc);margin:16px 2px 4px;font-size:15.5px'},x?x.name:'?'));
+    if(en.notes)c.append(h('div',{class:'tiny dim',style:'margin:0 2px 4px'},en.notes));
     let n=0;
     for(const st of en.sets){
       if(st.t!=='W')n++;
@@ -3201,19 +3844,134 @@ function workoutSheet(w){
       c.append(h('div',{class:'row',style:'padding:3px 2px'},
         h('span',{class:'dim tiny num',style:'width:24px;flex:0 0 auto'},label),
         h('span',{class:'num grow',style:'font-size:15px'},setLine(st)),
-        st.pr?h('span',{},'🏆'):null));
+        st.pr?h('span',{class:'pr-pill'},ic('trophy','sm')):null));
     }
   }
   c.append(
-    h('button',{class:'btn primary mt12',onclick:()=>{close();repeatWorkout(w);}},'Repeat Workout'),
-    h('button',{class:'btn danger mt8',onclick:async()=>{
+    h('button',{class:'btn primary mt12',onclick:()=>{close();repeatWorkout(w);}},ic('play','sm'),'Repeat workout'),
+    h('button',{class:'btn tint mt8',onclick:()=>{close();editWorkoutSheet(w);}},ic('edit','sm'),'Edit workout'),
+    h('button',{class:'btn plain danger mt8',onclick:async()=>{
       if(await ask('Delete workout?','It will be removed from history, records and charts permanently.','Delete',true)){
         await dbDel('workouts',w.id);
         S.workouts=S.workouts.filter(x=>x.id!==w.id);
         close();renderHistory();
       }
-    }},'Delete Workout'));
+    }},'Delete workout'));
   const close=sheet(w.name,c);
+}
+/* ----- editing a finished workout -----
+   A typo used to be permanent: 1000 for 100 became an all-time weight PR, an
+   est. 1RM and a strength score, and the only way out was deleting the whole
+   session. The numbers of every set, the name, notes, start time and
+   duration can now be corrected — the last also covers "forgot to press
+   Finish", which left a 14-hour session filed under the next morning — and
+   sets or whole exercises can be dropped. The sheet edits a copy; nothing
+   touches the database until Save. */
+const hhmm=ts=>{const d=new Date(ts);return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');};
+function editWorkoutSheet(w){
+  const d=JSON.parse(JSON.stringify(w));
+  const start=d.startedAt||(d.finishedAt-(d.dur||0)*1000);
+  const nameIn=h('input',{class:'in',value:d.name});
+  const noteIn=h('textarea',{class:'in',placeholder:'Notes'},d.notes||'');
+  const dateIn=h('input',{class:'in',type:'date',value:dateKey(start)});
+  const timeIn=h('input',{class:'in',type:'time',value:hhmm(start)});
+  const durIn=h('input',{class:'in num',inputmode:'numeric',value:String(Math.round((d.dur||0)/60))});
+  const list=h('div');
+  const num=(val,set,int)=>h('input',{class:'set-in num',type:'text',inputmode:int?'numeric':'decimal',
+    value:val!=null?fmtW(val):'',placeholder:'−',oninput:e=>{const v=pf(e.target.value);set(v==null?null:int?Math.round(v):v);}});
+  function paint(){
+    list.replaceChildren(...d.exs.map((en,ei)=>{
+      const x=S.ex.get(en.exId),cd=isCardio(x);
+      let n=0;
+      return h('div',{class:'ed-ex'},
+        h('div',{class:'row'},
+          h('div',{class:'grow bold',style:'color:var(--acc)'},x?x.name:'?'),
+          h('button',{class:'del-btn','aria-label':'Remove '+(x?x.name:'exercise'),onclick:()=>{d.exs.splice(ei,1);paint();}},ic('trash'))),
+        h('div',{class:'edrow sethead'},h('span',{},'Set'),h('span',{},cd?'Min':S.set.unit),
+          h('span',{},cd?distUnit():'Reps'),h('span',{},'RPE'),h('span',{})),
+        en.sets.map((st,si)=>{
+          if(st.t!=='W')n++;
+          return h('div',{class:'edrow'},
+            h('span',{class:'set-type t'+st.t},st.t==='N'?String(n):st.t),
+            cd?num(st.dur,v=>{st.dur=v;}):num(st.w,v=>{st.w=v;}),
+            cd?num(st.dist,v=>{st.dist=v;}):num(st.r,v=>{st.r=v;},true),
+            num(st.rpe,v=>{st.rpe=v;}),
+            h('button',{class:'del-btn','aria-label':'Delete set',onclick:()=>{en.sets.splice(si,1);if(!en.sets.length)d.exs.splice(ei,1);paint();}},ic('x')));
+        }));
+    }));
+    if(!d.exs.length)list.append(h('p',{class:'small dim',style:'padding:10px 2px'},'No sets left — save would leave an empty workout, so delete it from the workout page instead.'));
+  }
+  paint();
+  let busy=false;
+  const close=sheet('Edit workout',h('div',{},
+    h('span',{class:'lbl'},'Name'),nameIn,
+    h('div',{class:'row',style:'gap:8px;align-items:flex-end'},
+      h('div',{class:'grow'},h('span',{class:'lbl'},'Started'),dateIn),
+      h('div',{style:'width:112px;flex:0 0 auto'},h('span',{class:'lbl'},'Time'),timeIn),
+      h('div',{style:'width:84px;flex:0 0 auto'},h('span',{class:'lbl'},'Minutes'),durIn)),
+    h('span',{class:'lbl'},'Sets'),list,
+    h('span',{class:'lbl'},'Notes'),noteIn,
+    h('button',{class:'btn primary mt12',onclick:async()=>{
+      if(busy)return;
+      if(!d.exs.length){toast('Delete the workout instead — it has no sets left');return;}
+      busy=true;
+      const [y,mo,dd]=(dateIn.value||'').split('-').map(Number),[hh,mi]=(timeIn.value||'').split(':').map(Number);
+      const st2=y&&mo&&dd?new Date(y,mo-1,dd,hh||0,mi||0).getTime():start;
+      const mins=pf(durIn.value);
+      const dur=mins!=null&&mins>=0?Math.round(mins*60):(d.dur||0);
+      const nw={...d,name:nameIn.value.trim()||w.name,notes:noteIn.value.trim(),startedAt:st2,finishedAt:st2+dur*1000,dur};
+      try{await saveWorkoutEdit(w,nw);}
+      catch(err){busy=false;toast('Couldn’t save — '+err.message,{dur:5000});return;}
+      close();renderTab();workoutSheet(S.workouts.find(x=>x.id===w.id)||nw);
+      toast('Workout updated');
+    }},'Save changes')));
+}
+/* Persist an edited workout, then re-derive the PR flags of every lift it
+   touches — in date order, from the earlier of its old and new dates on.
+   Earlier sessions are only READ (to know the bests going in), never
+   rewritten. Rules match live logging: a first-ever session sets the bar but
+   earns no records, club milestones count from the first set that reaches
+   them, warm-ups never count. Returns the workouts whose flags changed. */
+async function saveWorkoutEdit(orig,nw){
+  await dbPut('workouts',nw);
+  const i=S.workouts.findIndex(x=>x.id===orig.id);
+  if(i>=0)S.workouts[i]=nw;else S.workouts.push(nw);
+  const ids=new Set([...orig.exs,...nw.exs].map(en=>en.exId));
+  const from=Math.min(orig.finishedAt,nw.finishedAt);
+  const changed=rederivePRs(ids,from);
+  for(const w of changed)if(w!==nw)await dbPut('workouts',w);
+  if(changed.includes(nw))await dbPut('workouts',nw);
+  return changed;
+}
+function rederivePRs(ids,fromTs){
+  const run={},changed=new Set(),EPS=1e-9;
+  for(const w of [...S.workouts].sort((a,b)=>a.finishedAt-b.finishedAt)){
+    for(const en of w.exs){
+      if(!ids.has(en.exId))continue;
+      const ex=S.ex.get(en.exId),cd=isCardio(ex),isBW=!!(ex&&ex.e==='Bodyweight');
+      const r=run[en.exId]||(run[en.exId]={w:null,e1:null,dur:null,dist:null,pace:null,seen:false});
+      const fresh=!r.seen,write=w.finishedAt>=fromTs;
+      let valid=false;
+      for(const st of en.sets){
+        let pr=false;
+        if(st.t!=='W'&&cd){
+          if(st.dur>0||st.dist>0)valid=true;
+          if(st.dist>0&&(r.dist==null||st.dist>r.dist+EPS)){if(!fresh)pr=true;r.dist=st.dist;}
+          if(st.dur>0&&(r.dur==null||st.dur>r.dur+EPS)){if(!fresh)pr=true;r.dur=st.dur;}
+          if(st.dur>0&&st.dist>=.5){const p=st.dur/st.dist;if(r.pace==null||p<r.pace-EPS){if(!fresh&&r.pace!=null)pr=true;r.pace=p;}}
+        }else if(st.t!=='W'&&st.r){
+          const ld=loadOf(ex,st),e=ld>0?epley(ld,st.r):0,prevW=r.w;
+          if(ld>0)valid=true;
+          if(ld>0&&(r.w==null||ld>r.w+EPS)){if(!fresh)pr=true;r.w=ld;}
+          if(e>0&&(r.e1==null||e>r.e1+EPS)){if(!fresh)pr=true;r.e1=e;}
+          if(!isBW&&st.w&&milestoneFor(st.w,prevW)!=null)pr=true;
+        }
+        if(write&&!!st.pr!==pr){if(pr)st.pr=1;else delete st.pr;changed.add(w);}
+      }
+      if(valid)r.seen=true;
+    }
+  }
+  return [...changed];
 }
 
 /* ==========================================================================
@@ -3233,6 +3991,10 @@ function chartReady(){
   }
   return true;
 }
+// theme tokens for canvas drawing (Chart.js can't read CSS variables itself)
+const tok=n=>getComputedStyle(document.body).getPropertyValue(n).trim();
+// an explanation, folded: the numbers lead, the prose is one tap away
+const info=(txt,label)=>h('details',{class:'info'},h('summary',{},ic('info'),label||'How this works'),h('p',{},txt));
 const chartFallback=()=>h('p',{class:'small dim',style:'padding:14px 2px'},'Charts need the Chart.js CDN — open the app online once to load it.');
 
 // per-session series for one exercise: est. 1RM, top-set weight, total volume
@@ -3288,7 +4050,7 @@ function muscleAgg(days,mode){
 function renderProgress(){
   const pg=$('#page-progress');pg.replaceChildren();
   if(!S.workouts.length){
-    pg.append(h('div',{class:'empty'},h('div',{class:'big'},'📈'),
+    pg.append(h('div',{class:'empty'},h('div',{class:'big'},ic('chart')),
       h('p',{},'Finish your first workout and your est. 1RM, top-set and volume charts appear here — plus records, weekly muscle volume and strength balance.')));
     return;
   }
@@ -3307,11 +4069,11 @@ function renderProgress(){
   if(PG.metric==='pace')pts=pts.filter(p=>p.pace>0);
   const box=h('div',{class:'chart-box mt12'});
   pg.append(h('section',{class:'card'},
-    h('h3',{},'Exercise progress'),
+    h('div',{class:'card-h'},h('span',{class:'badge'},ic('chart')),h('h3',{},'Exercise progress')),
     h('button',{class:'btn sm',style:'justify-content:space-between;padding:0 14px',
       onclick:()=>pickExercises({multi:false,allowCreate:false,title:'Choose exercise',
         onDone:ids=>{PG.exId=ids[0];renderProgress();}})},
-      h('span',{class:'bold'},ex?ex.name:'Choose exercise'),h('span',{class:'dim'},'▾')),
+      h('span',{class:'bold'},ex?ex.name:'Choose exercise'),h('span',{class:'dim'},ic('chevd','sm'))),
     h('div',{class:'mt8'},seg(
       cd?[['dur','Minutes'],['dist','Distance'],['pace','Pace']]
         :[['e1rm','Est. 1RM'],['top','Top set'],['vol','Volume']],
@@ -3331,7 +4093,8 @@ function renderProgress(){
       h('div',{class:'rec-val num'},r?f(r.v):'—'),
       r?h('div',{class:'tiny dim'},fmtDate(r.date)):null));
   pg.append(h('section',{class:'card'},
-    h('h3',{},'Records'+(ex?' — '+ex.name:'')),
+    h('div',{class:'card-h'},h('span',{class:'badge gold'},ic('trophy')),
+      h('h3',{},'Records',ex?h('div',{class:'tiny dim',style:'font-weight:600;margin-top:1px'},ex.name):null)),
     cd?[recRow('Longest session',rec&&rec.dur,v=>fmtMin(v)),
         recRow('Furthest distance',rec&&rec.dist,v=>fmtW(v)+' '+distUnit()),
         recRow('Best pace',rec&&rec.pace,v=>fmtPace(v)+' /'+distUnit())]
@@ -3343,7 +4106,7 @@ function renderProgress(){
   const sp=strengthProfile();
   const rbox=h('div',{class:'chart-box',style:'height:255px'});
   pg.append(h('section',{class:'card'},
-    h('h3',{},'Strength profile'),
+    h('div',{class:'card-h'},h('span',{class:'badge'},ic('bolt')),h('h3',{},'Strength profile')),
     h('div',{class:'row',style:'margin-bottom:4px'},
       h('div',{class:'grow'},
         h('div',{class:'bw-big num',style:'font-size:40px'},String(sp.score)),
@@ -3351,7 +4114,7 @@ function renderProgress(){
       ),
       h('div',{class:'levelchip'},strengthLabel(sp.score))),
     sp.any?rbox:h('p',{class:'small dim',style:'padding:10px 2px'},'Log free-weight or bodyweight lifts — or plot a machine’s movement — to build your radar.'),
-    h('p',{class:'tiny dim',style:'margin:8px 2px 0'},'Best est. 1RM per muscle vs bodyweight-scaled standards. 100 ≈ advanced. Free weights, bodyweight lifts and any machine you have calibrated.')));
+    info('Best est. 1RM per muscle against bodyweight-scaled standards — 100 ≈ advanced. Counts free weights, bodyweight lifts and any machine you have calibrated. Tune the difficulty in Settings if the label reads too generous (or harsh).')));
   if(sp.any){
     radarFX(rbox);
     const cvr=h('canvas');rbox.append(cvr);
@@ -3361,15 +4124,18 @@ function renderProgress(){
   const unc=uncalibratedMachines();
   if(unc.length){
     const card=h('section',{class:'card'},
-      h('h3',{},'Not counted yet'),
-      h('p',{class:'small dim',style:'margin:-2px 2px 4px;line-height:1.5'},
-        unc.length+' machine or cable '+(unc.length===1?'exercise is':'exercises are')+' left out of your strength score, because a stack number doesn’t say what your muscles actually felt. Plot how the weight moves and they join in.'));
+      h('div',{class:'card-h'},h('span',{class:'badge'},ic('plot')),h('h3',{},'Not counted yet')),
+      h('p',{class:'small dim',style:'margin:-4px 2px 4px;line-height:1.5'},
+        unc.length+' machine or cable '+(unc.length===1?'exercise sits':'exercises sit')+' outside your strength score until you plot how the weight moves.'),
+      info('A stack number doesn’t say what your muscles felt: levers, pulleys and sleds sit between the plates and your hands. Plotting the movement (or picking a Technogym preset) supplies the real leverage, and the machine joins your score.','Why'));
     for(const x of unc.slice(0,6))card.append(h('div',{class:'lrow'},
       h('div',{class:'grow'},h('div',{class:'bold small'},x.name),h('div',{class:'tiny dim'},x.m+' · '+x.e)),
-      h('button',{class:'btn sm inline',style:'flex:0 0 auto',
+      h('button',{class:'btn sm inline tint',style:'flex:0 0 auto',
         onclick:()=>movementSheet(x,()=>renderProgress())},'Plot')));
     if(unc.length>6)card.append(h('p',{class:'tiny dim',style:'margin:8px 2px 0'},
-      '+'+(unc.length-6)+' more — plot them from any exercise’s ⚙ menu.'));
+      '+'+(unc.length-6)+' more — plot them from any exercise’s menu.'));
+    if(unc.some(x=>tgSuggest(x).length))card.append(h('button',{class:'btn tint mt12',
+      onclick:()=>tgBulkSheet(()=>renderProgress())},ic('sparkle'),'Calibrate with Technogym presets'));
     pg.append(card);
   }
   /* --- weekly muscle volume --- */
@@ -3377,11 +4143,11 @@ function renderProgress(){
   const entries=MUSCLES.map(m=>[m,agg[m]||0]).filter(e2=>e2[1]>0).sort((a,b)=>b[1]-a[1]);
   const mbox=h('div',{style:'position:relative;height:'+Math.max(130,entries.length*30+50)+'px',class:'mt12'});
   pg.append(h('section',{class:'card'},
-    h('h3',{},'Muscle volume — last 7 days'),
+    h('div',{class:'card-h'},h('span',{class:'badge'},ic('dumbbell')),h('h3',{},'Muscle volume',h('div',{class:'tiny dim',style:'font-weight:600;margin-top:1px'},'Last 7 days'))),
     seg([['sets','Sets'],['vol','Volume ('+S.set.unit+')']],PG.mus,v=>{PG.mus=v;renderProgress();}),
     entries.length?mbox:h('p',{class:'small dim',style:'padding:12px 2px'},'No sets logged in the last 7 days.'),
-    h('p',{class:'tiny dim',style:'margin:8px 2px 0;line-height:1.5'},PG.mus==='sets'
-      ?'Hard sets per muscle (secondary muscles count half). A per-side lift is one set of stimulus per side, so it counts once.'
+    info(PG.mus==='sets'
+      ?'Hard sets per muscle — secondary muscles count half. A per-side lift is one set of stimulus per side, so it counts once.'
       :'Total load moved — per-side lifts count both sides, and calibrated machines count their real leverage, so everything is comparable.')));
   if(entries.length){
     const cv2=h('canvas');mbox.append(cv2);
@@ -3389,10 +4155,9 @@ function renderProgress(){
   }
   /* --- strength balance --- */
   pg.append(h('section',{class:'card'},
-    h('h3',{},'Strength balance'),
-    h('p',{class:'tiny dim',style:'margin:-4px 0 10px'},
-      'Each muscle’s strength score vs bodyweight-scaled standards (100 ≈ advanced) — the same scale as the radar, so muscles are directly comparable. A short bar is genuinely weaker than the rest of you, not just trained less lately.'),
-    balanceEl()));
+    h('div',{class:'card-h'},h('span',{class:'badge'},ic('sliders')),h('h3',{},'Strength balance')),
+    balanceEl(),
+    info('Each muscle’s strength score against bodyweight-scaled standards (100 ≈ advanced) — the same scale as the radar, so muscles compare directly. A short bar is genuinely weaker than the rest of you, not just trained less lately.')));
 }
 function drawExChart(cv,pts){
   if(!chartReady()){cv.replaceWith(chartFallback());return;}
@@ -3400,8 +4165,8 @@ function drawExChart(cv,pts){
   const key=PG.metric;
   CH.ex=new Chart(cv,{type:'line',
     data:{labels:pts.map(p=>fmtDateShort(p.x)),
-      datasets:[{data:pts.map(p=>p[key]),borderColor:'#4c8dff',backgroundColor:'rgba(76,141,255,.15)',
-        fill:true,tension:.35,pointRadius:3.5,pointBackgroundColor:'#4c8dff',borderWidth:2.5}]},
+      datasets:[{data:pts.map(p=>p[key]),borderColor:tok('--data1'),backgroundColor:tok('--data1-fill'),
+        fill:true,tension:.35,pointRadius:3.5,pointBackgroundColor:tok('--data1'),borderWidth:2.5}]},
     options:{responsive:true,maintainAspectRatio:false,
       plugins:{legend:{display:false}},
       scales:{y:{grace:'10%'},x:{ticks:{maxTicksLimit:6,maxRotation:0}}}}});
@@ -3411,7 +4176,7 @@ function drawMuscleChart(cv,entries){
   if(CH.mus)CH.mus.destroy();
   CH.mus=new Chart(cv,{type:'bar',
     data:{labels:entries.map(e2=>e2[0]),
-      datasets:[{data:entries.map(e2=>round1(e2[1])),backgroundColor:'#4c8dff',borderRadius:6,barThickness:16}]},
+      datasets:[{data:entries.map(e2=>round1(e2[1])),backgroundColor:tok('--data1'),borderRadius:6,barThickness:16}]},
     options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,
       plugins:{legend:{display:false}},
       scales:{x:{beginAtZero:true}}}});
@@ -3477,7 +4242,7 @@ function renderBody(){
   const latest=entries[entries.length-1]||null;
   const prevE=entries.length>1?entries[entries.length-2]:null;
   const card=h('section',{class:'card'},
-    h('h3',{},'Measurements'),
+    h('div',{class:'card-h'},h('span',{class:'badge'},ic('scale')),h('h3',{},'Measurements')),
     h('div',{class:'chips'},
       keys.map(k=>h('button',{class:'chip'+(k===BD.metric?' on':''),onclick:()=>{BD.metric=k;renderBody();}},k)),
       h('button',{class:'chip',onclick:newMeasurementSheet},'+ New')),
@@ -3487,7 +4252,7 @@ function renderBody(){
         latest
           ?h('div',{class:'tiny dim'},(prevE?((latest.value-prevE.value>=0?'+':'')+fmtW(round1(latest.value-prevE.value))+' since '+fmtDateShort(prevE.date)+'  ·  '):'')+'last: '+fmtDateShort(latest.date))
           :h('div',{class:'tiny dim'},'Nothing logged yet')),
-      h('button',{class:'btn primary inline',style:'min-height:48px',onclick:()=>logBodySheet(BD.metric)},'+ Log')));
+      h('button',{class:'btn primary inline',style:'min-height:48px',onclick:()=>logBodySheet(BD.metric)},ic('plus','sm'),'Log')));
   if(entries.length>=2){
     const box=h('div',{class:'chart-box short mt12'});
     const cv=h('canvas');box.append(cv);card.append(box);
@@ -3498,23 +4263,23 @@ function renderBody(){
       h('div',{class:'grow'},
         h('span',{class:'bold num'},fmtW(b.value)),
         h('span',{class:'tiny dim'},'   '+fmtDate(b.date))),
-      h('button',{class:'icon-btn',style:'width:38px;height:38px',onclick:async()=>{
+      h('button',{class:'del-btn','aria-label':'Delete '+fmtW(b.value)+' on '+fmtDate(b.date),onclick:async()=>{
         if(await ask('Delete entry?',fmtW(b.value)+' on '+fmtDate(b.date),'Delete',true)){
           await dbDel('body',b.id);
           S.body=S.body.filter(x=>x.id!==b.id);
           BW_CACHE=null;
           renderBody();
         }
-      }},'✕')))));
+      }},ic('trash'))))));
   }
   pg.append(recoveryCard(),card);
   const fileIn=h('input',{type:'file',accept:'image/*',style:'display:none',
     onchange:e=>{const f=e.target.files[0];if(f)addPhoto(f);e.target.value='';}});
   pg.append(h('section',{class:'card'},
-    h('h3',{},'Progress photos'),
-    h('p',{class:'tiny dim',style:'margin:-4px 0 10px'},'Stored on-device in IndexedDB and included in JSON backups.'),
+    h('div',{class:'card-h'},h('span',{class:'badge'},ic('camera')),h('h3',{},'Progress photos',
+      h('div',{class:'tiny dim',style:'font-weight:600;margin-top:1px'},'On this device only · included in backups'))),
     h('div',{class:'photo-grid'},
-      h('button',{class:'photo-add',onclick:()=>fileIn.click()},h('b',{},'+'),'Add photo'),
+      h('button',{class:'photo-add',onclick:()=>fileIn.click()},ic('camera','lg'),'Add photo'),
       [...S.photos].sort((a,b)=>b.date-a.date).map(p=>h('button',{class:'photo-tile',onclick:()=>photoViewer(p)},
         h('img',{src:photoURL(p),alt:'progress photo'}),
         h('div',{class:'pd'},fmtDateShort(p.date))))),
@@ -3525,8 +4290,8 @@ function drawBodyChart(cv,entries){
   if(CH.body)CH.body.destroy();
   CH.body=new Chart(cv,{type:'line',
     data:{labels:entries.map(e2=>fmtDateShort(e2.date)),
-      datasets:[{data:entries.map(e2=>e2.value),borderColor:'#2fd671',backgroundColor:'rgba(47,214,113,.12)',
-        fill:true,tension:.3,pointRadius:3,pointBackgroundColor:'#2fd671',borderWidth:2.5}]},
+      datasets:[{data:entries.map(e2=>e2.value),borderColor:tok('--data2'),backgroundColor:tok('--data2')+'22',
+        fill:true,tension:.3,pointRadius:3,pointBackgroundColor:tok('--data2'),borderWidth:2.5}]},
     options:{responsive:true,maintainAspectRatio:false,
       plugins:{legend:{display:false}},
       scales:{y:{grace:'10%'},x:{ticks:{maxTicksLimit:6,maxRotation:0}}}}});
@@ -3616,7 +4381,9 @@ function applyTheme(){
   const light=themeIsLight();
   document.body.classList.toggle('light',light);
   const m=document.querySelector('meta[name="theme-color"]');
-  if(m)m.setAttribute('content',light?'#ECEAE3':'#0B0B0D');
+  // the header band's colour, so Android's status bar and the header are one
+  // surface — and iOS 27 has a solid colour to extend instead of a blur
+  if(m)m.setAttribute('content',light?'#F4F2EB':'#17181D');
   chartInit=false;   // charts re-read theme colours on next draw
 }
 // time-of-day + rotating greeting; name is optional and simply omitted
@@ -3882,9 +4649,11 @@ function bodySVG(view,rec){
   }
   return '<svg viewBox="0 0 120 212" xmlns="http://www.w3.org/2000/svg">'+s+'</svg>';
 }
+let REC_OPEN=false;
 function recoveryCard(){
   const rec=muscleRecovery();
-  const card=h('section',{class:'card'},h('h3',{},'Muscle recovery'));
+  const card=h('section',{class:'card'},
+    h('div',{class:'card-h'},h('span',{class:'badge'},ic('user')),h('h3',{},'Muscle recovery')));
   const wrap=h('div',{class:'mm-wrap'},
     h('div',{},h('div',{html:bodySVG('front',rec)}),h('div',{class:'mm-view-lbl'},'Front')),
     h('div',{},h('div',{html:bodySVG('back',rec)}),h('div',{class:'mm-view-lbl'},'Back')));
@@ -3897,17 +4666,27 @@ function recoveryCard(){
   });
   card.append(wrap,
     h('div',{class:'mm-scale'},h('span',{},'Fresh'),h('div',{class:'mm-grad'}),h('span',{},'Fatigued')),
-    h('p',{class:'tiny dim',style:'margin:6px 2px 8px'},'Estimated from hard sets × RPE — cardio minutes count too — with ~40 h recovery decay. Grey = not trained yet. Tap a muscle for details.'));
+    info('Estimated from hard sets × RPE — cardio minutes count too — with roughly 40 hours of recovery decay. Grey means not trained yet. Tap a muscle on the map for its details.'));
   const cr=cardioRecommendation();
-  if(cr)card.append(h('div',{class:'pin-note',style:'margin:0 0 8px',onclick:()=>switchTab('log')},
-    '🏃 Cardio pick for today: '+cr.ex.name+' — '+cardioReason(cr).charAt(0).toLowerCase()+cardioReason(cr).slice(1)));
+  if(cr)card.append(h('div',{class:'pin-note',style:'margin:8px 0 4px',onclick:()=>switchTab('log')},ic('run','sm'),
+    h('span',{},'Cardio pick for today: '+cr.ex.name+' — '+cardioReason(cr).charAt(0).toLowerCase()+cardioReason(cr).slice(1))));
+  // the full list read as a wall of "Fresh": lead with what needs rest, the
+  // rest is one tap away
   const rows=MUSCLES.map(m=>[m,rec[m]]).filter(x=>x[1].last!=null).sort((a,b)=>b[1].fatigue-a[1].fatigue);
-  for(const[m,r]of rows){
-    card.append(h('div',{class:'lrow',style:'padding:8px 2px;min-height:40px'},
+  const tired=rows.filter(x=>x[1].fatigue>=30);
+  const shown=REC_OPEN?rows:tired.slice(0,6);
+  const list=h('div',{style:'margin-top:6px'});
+  for(const[m,r]of shown){
+    list.append(h('div',{class:'lrow',style:'padding:8px 2px;min-height:40px'},
       h('div',{class:'grow small bold'},m),
       h('div',{class:'tiny dim',style:'margin-right:8px'},agoTxt(r.last)),
       recChip(r.fatigue)));
   }
+  if(rows.length&&!tired.length&&!REC_OPEN)list.append(h('p',{class:'small',style:'padding:8px 2px;color:var(--grn)'},
+    'Everything you train is fresh — good day to go hard.'));
+  if(rows.length>shown.length)list.append(h('button',{class:'link',style:'margin-top:4px',onclick:()=>{REC_OPEN=true;renderBody();}},
+    'Show all '+rows.length+' muscles',ic('chev','sm')));
+  card.append(list);
   if(!rows.length)card.append(h('p',{class:'small dim',style:'padding:8px 2px'},'Log workouts and this map shows what needs rest and what’s ready to train.'));
   return card;
 }
@@ -3968,9 +4747,8 @@ function coachCustomizeSheet(){
 function cardioRecCard(){
   const r=cardioRecommendation();
   if(!r&&![...S.ex.values()].some(isCardio))return null;
-  const head=h('div',{class:'row',style:'margin-bottom:10px'},
-    h('h3',{class:'grow',style:'margin-bottom:0'},'Cardio coach 🏃'),
-    h('button',{class:'btn sm inline',style:'flex:0 0 auto',onclick:coachCustomizeSheet},'Customize'));
+  const head=h('div',{class:'card-h'},h('span',{class:'badge'},ic('run')),h('h3',{},'Cardio coach'),
+    h('button',{class:'link',onclick:coachCustomizeSheet},'Customize',ic('chev','sm')));
   if(!r)return h('section',{class:'card'},head,
     h('p',{class:'small dim',style:'margin:-2px 0 0'},'All cardio exercises are unchecked — tap Customize to pick what the coach can recommend.'));
   return h('section',{class:'card'},
@@ -3978,12 +4756,12 @@ function cardioRecCard(){
     h('p',{class:'small dim',style:'margin:-2px 0 0'},'Based on your current muscle fatigue, we recommend:'),
     h('div',{class:'crec-name'},r.ex.name),
     h('p',{class:'tiny dim'},cardioReason(r)),
-    h('button',{class:'btn sm mt12',onclick:async()=>{
+    h('button',{class:'btn sm tint mt12',onclick:async()=>{
       if(!(await guardActive()))return;
       S.active=newWorkoutShell('Cardio Session');S.prev={};S.records={};
       addExerciseToActive(r.ex.id);
       saveActive();switchTab('log');
-    }},'Start a '+r.ex.name+' session'));
+    }},ic('play','sm'),'Start '+(/^[aeiou]/i.test(r.ex.name)?'an ':'a ')+r.ex.name+' session'));
 }
 
 /* ==========================================================================
@@ -4062,17 +4840,18 @@ function prBoardCard(){
   const line=p=>{
     const day=dayPhrase(p.ts);
     let icon,kids;
-    if(p.kind==='club'){icon='💯';kids=[day+', you joined the ',h('b',{},fmtW(p.v)+unit+' club'),' on '+p.ex.name+'.'];}
-    else if(p.kind==='weight'){icon='🏋️';kids=[day+', you hit an all-time heaviest ',h('b',{},fmtW(p.v)+unit),' on '+p.ex.name+'.'];}
-    else if(p.kind==='e1rm'){icon='📈';kids=[day+', your est. 1RM on '+p.ex.name+' climbed to ',h('b',{},fmtW(round1(p.v))+unit),'.'];}
-    else if(p.kind==='dist'){icon='🗺️';kids=[day+', your furthest '+p.ex.name+' ever — ',h('b',{},fmtW(p.v)+' '+distUnit()),'.'];}
-    else{icon='⏱️';kids=[day+', your longest '+p.ex.name+' yet — ',h('b',{},fmtMin(p.v)),'.'];}
-    return h('div',{class:'prb-line'},h('span',{class:'prb-ico'},icon),h('span',{},...kids));
+    if(p.kind==='club'){icon='trophy';kids=[day+', you joined the ',h('b',{},fmtW(p.v)+unit+' club'),' on '+p.ex.name+'.'];}
+    else if(p.kind==='weight'){icon='dumbbell';kids=[day+', you hit an all-time heaviest ',h('b',{},fmtW(p.v)+unit),' on '+p.ex.name+'.'];}
+    else if(p.kind==='e1rm'){icon='chart';kids=[day+', your est. 1RM on '+p.ex.name+' climbed to ',h('b',{},fmtW(round1(p.v))+unit),'.'];}
+    else if(p.kind==='dist'){icon='run';kids=[day+', your furthest '+p.ex.name+' ever — ',h('b',{},fmtW(p.v)+' '+distUnit()),'.'];}
+    else{icon='clock';kids=[day+', your longest '+p.ex.name+' yet — ',h('b',{},fmtMin(p.v)),'.'];}
+    return h('div',{class:'prb-line'},h('span',{class:'prb-ico'},ic(icon)),h('span',{},...kids));
   };
   const shown=PRB_OPEN?prs:prs.slice(0,5);
-  const card=h('section',{class:'card'},h('h3',{},'This week’s PR board 🏆'));
+  const card=h('section',{class:'card'},
+    h('div',{class:'card-h'},h('span',{class:'badge gold'},ic('trophy')),h('h3',{},'This week’s PR board')));
   card.append(...shown.map(line));
-  if(prs.length>shown.length)card.append(h('button',{class:'btn sm mt8',
+  if(prs.length>shown.length)card.append(h('button',{class:'btn sm tint mt8',
     onclick:()=>{PRB_OPEN=true;renderLog();}},'Show all '+prs.length+' records'));
   return card;
 }
@@ -4176,6 +4955,149 @@ function uncalibratedMachines(){
 }
 
 /* ==========================================================================
+   TECHNOGYM PRESETS — the movement plotter, pre-plotted
+   --------------------------------------------------------------------------
+   Technogym doesn't publish stack-to-handle ratios, so NONE of these is a
+   factory number, and the app says so. What each preset does encode is
+   everything knowable about the machine: its line, the seat, which limb
+   works, the direction and a typical length of the movement, and the
+   mechanical advantage its mechanism typically gives —
+     · a direct cable (Lat Machine, Pulley)        1:1 → ×1.00
+     · crossover / adjustable pulleys              2:1 → ×0.50
+     · a cam or lever between stack and handles        → ×0.45–0.75 by type
+     · plates riding a sled                            → sin(rail angle)
+   That beats a guessed drag, and "Measure it" under the rig then replaces
+   the typical ratio with your own machine's: two tape-measure readings over
+   one rep (how far your hands travel, how far the stack rises).
+   ========================================================================== */
+const TG_LINES=[['sel','Selection · Artis · Element+'],['pure','Pure Strength (plate-loaded)'],['cable','Cable stations']];
+const tgLineName=l=>(TG_LINES.find(x=>x[0]===l)||['',''])[1];
+// id, line, name, style, seat, figure x, working path [x0,y0,x1,y1] (null =
+// shaped by the exercise's muscle), typical ratio (null = the sled's geometry
+// decides), the limb that tracks the path ('none' for sideways or pad-driven
+// moves a side view can't draw), path label, seed exercises it fits, and a
+// name pattern for exercises you created yourself
+const TG=[
+  ['sel-chest','sel','Chest Press','lever','seated',30,[34,58,48,56],.70,'arms','',['x48'],/chest press/i],
+  ['sel-shoulder','sel','Shoulder Press','lever','seated',30,[31,50,33,36],.65,'arms','',['x49'],/shoulder press/i],
+  ['sel-lat','sel','Lat Machine','cable','seated',30,[33,34,33,51],1,'arms','',['x17'],/lat (machine|pull)/i],
+  ['sel-pulldown','sel','Pulldown (converging arms)','lever','seated',30,[33,34,33,51],.70,'arms','',[],/pull ?down/i],
+  ['sel-lowrow','sel','Low Row','lever','seated',30,[48,60,35,61],.75,'arms','',[],/low row|machine row/i],
+  ['sel-pulley','sel','Pulley (seated cable row)','cable','seated',30,[48,60,35,61],1,'arms','',['x18'],/cable row|seated row|pulley/i],
+  ['sel-upper','sel','Upper Back','lever','seated',30,[46,57,31,57],.60,'arms','',[],/upper back/i],
+  ['sel-pec','sel','Pectoral','lever','seated',30,[30,57,47,57],.50,'arms','',['x47'],/pec|fly machine/i],
+  ['sel-rfly','sel','Reverse Fly','lever','seated',30,[47,57,29,56],.50,'arms','',[],/reverse fly|rear delt/i],
+  ['sel-delts','sel','Delts Machine','lever','seated',30,[30,68,30,55],.45,'arms','',[],/delts? machine|lateral raise machine/i],
+  ['sel-curl','sel','Arm Curl','lever','seated',30,[44,64,34,52],.50,'arms','',['x30'],/arm curl|curl machine|preacher/i],
+  ['sel-ext','sel','Arm Extension','lever','seated',30,[34,52,44,64],.50,'arms','',[],/arm extension|triceps? (extension|press) machine/i],
+  ['sel-legpress','sel','Leg Press','cable','incline',30,[48,62,63,66],1,'legs','',['x35'],/leg press/i],
+  ['sel-legext','sel','Leg Extension','lever','seated',30,[49,89,61,75],.55,'legs','',['x39'],/leg ext/i],
+  ['sel-legcurl','sel','Leg Curl','lever','seated',30,[60,76,47,90],.55,'legs','',['x40'],/leg curl/i],
+  ['sel-abduct','sel','Abductor','lever','seated',30,[44,72,56,72],.45,'none','KNEES',['x57'],/abduct/i],
+  ['sel-adduct','sel','Adductor','lever','seated',30,[56,72,44,72],.45,'none','KNEES',['x56'],/adduct/i],
+  ['sel-hip','sel','Multi Hip (kickback)','lever','standing',34,[36,89,22,84],.55,'legs','',[],/multi ?hip|kickback/i],
+  ['sel-crunch','sel','Abdominal Crunch','lever','seated',30,[28,53,38,63],.50,'none','CHEST PAD',[],/crunch/i],
+  ['sel-lowback','sel','Lower Back','lever','seated',30,[37,60,28,53],.60,'none','BACK PAD',[],/lower back|back ext/i],
+  ['pure-chest','pure','Chest Press','lever','seated',30,[34,58,48,56],.70,'arms','',['x48'],/chest press/i],
+  ['pure-incline','pure','Incline Chest Press','lever','incline',30,[27,57,37,44],.70,'arms','',[],/incline.*(press|machine)/i],
+  ['pure-shoulder','pure','Shoulder Press','lever','seated',30,[31,50,33,36],.65,'arms','',['x49'],/shoulder press/i],
+  ['pure-lat','pure','Lat Pulldown','lever','seated',30,[33,34,33,51],.75,'arms','',['x17'],/pull ?down/i],
+  ['pure-row','pure','Row','lever','seated',30,[48,60,35,61],.75,'arms','',['x21'],/row/i],
+  ['pure-linear','pure','Linear Leg Press (45° sled)','sled','lying',26,[44,64,58,50],null,'legs','',['x35'],/leg press/i],
+  ['pure-vertical','pure','Vertical Leg Press','direct','lying',26,[35,62,35,46],null,'legs','',[],/vertical leg press/i],
+  ['pure-hack','pure','Hack Squat','sled','standing',34,[30,60,40,48.9],null,'none','SHOULDERS',['x36'],/hack/i],
+  ['pure-legext','pure','Leg Extension','lever','seated',30,[49,89,61,75],.60,'legs','',['x39'],/leg ext/i],
+  ['pure-legcurl','pure','Leg Curl','lever','seated',30,[60,76,47,90],.60,'legs','',['x40'],/leg curl/i],
+  ['cable-dap','cable','Dual Adjustable Pulley (2:1)','cable','standing',34,null,.50,'arms','',
+    ['x32','x33','x31','x24','x22','x52','x59'],/cable|pushdown|face pull|woodchop|rope/i],
+  ['cable-cross','cable','Cable Crossover (2:1)','cable','standing',34,null,.50,'arms','',['x46'],/crossover|cable fly/i],
+].map(([id,line,name,kind,pos,fx,path,ratio,track,plbl,fits,rx])=>({id,line,name,kind,pos,fx,path,ratio,track,plbl,fits,rx}));
+// a cable station's path depends on what you do with it: a pushdown, a curl, a fly…
+const TG_CABLE_PATHS={Triceps:[39,49,39,63],Biceps:[41,62,39,47],Forearms:[41,62,40,55],Chest:[36,50,52,52],
+  Shoulders:[36,62,36,45],'Side Delts':[36,62,36,45],'Front Delts':[40,62,46,46],'Rear Delts':[52,48,38,48],
+  Back:[54,46,40,47],Traps:[40,62,40,55],Abs:[36,44,42,60],Obliques:[34,44,44,60]};
+function tgPlot(p,ex){
+  const path=p.path||TG_CABLE_PATHS[ex&&ex.m]||TG_CABLE_PATHS.Triceps;
+  const [hx0,hy0,hx1,hy1]=path,hd=Math.hypot(hx1-hx0,hy1-hy0);
+  const M={kind:p.kind,pos:p.pos,fx:p.fx,hx0,hy0,hx1,hy1};
+  if(p.ratio==null){         // plates ride with the working limb: the rail's angle IS the ratio
+    M.wx0=hx0+7;M.wy0=hy0+7;M.wx1=hx1+7;M.wy1=hy1+7;
+  }else{                     // a stack column rising ratio × the working travel
+    const x=p.kind==='cable'?86:82;
+    M.wx0=x;M.wy0=84;M.wx1=x;M.wy1=84-p.ratio*hd;
+  }
+  return M;
+}
+// best presets for an exercise: the seeds it was written for, then name
+// matches, then equipment. Free weights and cardio never need one.
+function tgSuggest(ex){
+  if(!ex||isCardio(ex)||STR_EQUIP.has(ex.e))return [];
+  const score=p=>(p.fits.includes(ex.id)?3:0)+(p.rx.test(ex.name)?2:0)
+    +(p.line==='cable'&&ex.e==='Cable'?1.5:0)+(p.line==='sel'&&ex.e==='Machine'?.25:0);
+  return TG.map(p=>({p,s:score(p)})).filter(o=>o.s>=2).sort((a,b)=>b.s-a.s).map(o=>o.p);
+}
+const tgRatioTxt=(p,ex)=>'×'+plotCalc(tgPlot(p,ex)).ratio.toFixed(2)+(p.ratio==null?' (sled angle)':' typical');
+// the saved calibration for a plot — shared by the plotter's Save and the
+// bulk "calibrate with presets" flow, so both store exactly the same shape
+function mechFromPlot(M,extra){
+  const c=plotCalc(M);
+  const mech={kind:M.kind,pos:M.pos,fx:Math.round(M.fx*10)/10,
+    ratio:Math.round(c.ratio*1000)/1000,romCm:Math.round(c.romCm),at:Date.now()};
+  for(const k of PLOT_KEYS)mech[k]=Math.round(M[k]*10)/10;
+  return Object.assign(mech,extra||{});
+}
+function tgPresetSheet(ex,onPick){
+  const row=p=>({icon:p.line==='cable'?'swap':p.line==='pure'?'plot':'dumbbell',label:p.name,
+    sub:tgLineName(p.line),val:tgRatioTxt(p,ex).split(' ')[0],fn:()=>onPick(p)});
+  const sug=tgSuggest(ex).slice(0,3);
+  menuSheet('Technogym presets',[
+    sug.length?{title:'Suggested for '+ex.name,rows:sug.map(row)}:[],
+    ...TG_LINES.map(([l,name])=>({title:name,rows:TG.filter(p=>p.line===l).map(row)}))]);
+}
+/* Calibrate many machines at once — a Technogym gym is usually ALL Technogym.
+   Lists every machine/cable exercise that isn't calibrated yet with its best
+   preset, pre-ticked; nothing is written until you confirm. */
+function tgBulkSheet(onDone){
+  const cands=[...S.ex.values()].filter(x=>!isCardio(x)&&!STR_EQUIP.has(x.e)&&!isCalibrated(x))
+    .sort((a,b)=>a.name.localeCompare(b.name)).map(x=>({x,p:tgSuggest(x)[0]||null}));
+  const pick=new Set(cands.filter(c2=>c2.p).map(c2=>c2.x.id));
+  const list=h('div');
+  const go=h('button',{class:'btn primary mt12'});
+  const paint=()=>{
+    list.replaceChildren(...cands.map(({x,p})=>{
+      const row=h('div',{class:'ex-row'+(p&&pick.has(x.id)?' sel':'')+(p?'':' off'),onclick:()=>{
+        if(!p)return;
+        pick.has(x.id)?pick.delete(x.id):pick.add(x.id);paint();
+      }},
+      h('div',{class:'sel-dot'},'✓'),
+      h('div',{class:'grow'},
+        h('div',{class:'bold',style:'font-size:15.5px'},x.name),
+        h('div',{class:'tiny dim'},p?tgLineName(p.line)+' · '+p.name+' · '+tgRatioTxt(p,x):'No matching preset — plot it by hand')));
+      return row;
+    }));
+    go.textContent=pick.size?'Calibrate '+pick.size+' machine'+(pick.size>1?'s':''):'Nothing selected';
+    go.style.opacity=pick.size?'1':'.5';
+  };
+  go.onclick=async()=>{
+    if(!pick.size)return;
+    for(const {x,p} of cands){
+      if(!p||!pick.has(x.id))continue;
+      x.mech=mechFromPlot(tgPlot(p,x),{preset:p.id,track:p.track});
+      x.edited=1;
+      await dbPut('exercises',x);
+    }
+    close();toast(pick.size+' machine'+(pick.size>1?'s':'')+' calibrated with Technogym presets',{dur:3500});
+    if(onDone)onDone();
+  };
+  paint();
+  const close=sheet('Calibrate with presets',h('div',{},
+    h('p',{class:'small dim',style:'margin:2px 2px 10px;line-height:1.5'},
+      'Typical leverage for each Technogym machine type — Technogym doesn’t publish exact ratios. Open any machine later and use “Measure it” for its real one.'),
+    cands.length?list:h('p',{class:'small dim',style:'padding:10px 2px'},'Every machine in your library is already calibrated.'),
+    cands.length?h('div',{class:'sticky-add'},go):null));
+}
+
+/* ==========================================================================
    STRENGTH PROFILE — radar + overall score
    Best est. 1RM per muscle ÷ (bodyweight × reference multiplier) × 100.
    100 ≈ advanced ("Pro"+). Machines join once calibrated (see MECHANICS).
@@ -4222,10 +5144,10 @@ function drawRadar(cv,sp){
     data:{labels:RADAR_MUSCLES,
       datasets:[
         {data:RADAR_MUSCLES.map(m=>Math.min(140,sp.radar[m]||0)),
-          backgroundColor:'rgba(139,92,246,.28)',borderColor:'#8b5cf6',borderWidth:2.5,
-          pointBackgroundColor:'#c4a5ff',pointBorderColor:'#8b5cf6',pointRadius:4,pointBorderWidth:1.5},
+          backgroundColor:tok('--data1-fill'),borderColor:tok('--data1'),borderWidth:2.5,
+          pointBackgroundColor:tok('--data1'),pointBorderColor:tok('--card'),pointRadius:4,pointBorderWidth:1.5},
         {data:RADAR_MUSCLES.map(()=>100),   // "advanced" reference ring
-          borderColor:'rgba(255,207,77,.45)',borderWidth:1.5,borderDash:[5,5],
+          borderColor:tok('--dim'),borderWidth:1.2,borderDash:[4,5],
           fill:false,pointRadius:0}]},
     options:{responsive:true,maintainAspectRatio:false,
       plugins:{legend:{display:false}},
@@ -4238,8 +5160,8 @@ function drawRadar(cv,sp){
 // floating glow-dust behind the radar (pure CSS animation, composited)
 function radarFX(box){
   box.append(h('div',{class:'radar-glow'}));
-  const colors=['#8b5cf6','#4c8dff','#ffcf4d'];
-  for(let i=0;i<12;i++){
+  const colors=[tok('--data1'),tok('--gold'),tok('--data2')];
+  for(let i=0;i<7;i++){
     const c=colors[i%3],sz=2+Math.random()*3.5;
     box.append(h('div',{class:'rfx',style:'left:'+(8+Math.random()*84)+'%;top:'+(8+Math.random()*84)+'%;width:'+sz+'px;height:'+sz+'px;background:'+c+';box-shadow:0 0 '+(4+sz)+'px '+c+';animation-duration:'+(2.5+Math.random()*3)+'s;animation-delay:-'+(Math.random()*3).toFixed(2)+'s'}));
   }
@@ -4293,34 +5215,6 @@ const trainedOn=ts=>S.workouts.some(w=>daysBetween(w.finishedAt,ts)===0);
 function schedLabel(d){
   if(!d)return '';
   return d.day.rest?'Rest day':(d.tpl?d.tpl.name:d.day.label||'Training');
-}
-/* ---- Log-page card: what today is, what tomorrow is, one tap to start ---- */
-function scheduleCard(){
-  const s=schedNorm(S.set.sched);
-  if(!s||!s.on)return null;
-  const today=schedFor(Date.now()),tom=schedFor(Date.now()+864e5);
-  if(!today)return null;
-  const done=trainedOn(Date.now());
-  const card=h('section',{class:'card'});
-  card.append(h('div',{class:'row',style:'margin-bottom:10px'},
-    h('h3',{class:'grow',style:'margin-bottom:0'},'Today’s plan 🗓️'),
-    h('button',{class:'btn sm inline',style:'flex:0 0 auto',onclick:scheduleSheet},'Edit')));
-  card.append(h('div',{class:'sched-today'+(today.day.rest?' rest':'')},schedLabel(today)));
-  if(today.day.rest){
-    card.append(h('p',{class:'tiny dim',style:'margin:2px 0 0'},
-      'Scheduled rest — recovery is where the adaptation happens. Tomorrow: '+schedLabel(tom)+'.'));
-  }else if(done){
-    card.append(h('p',{class:'tiny dim',style:'margin:2px 0 0'},
-      '✅ Done for today. Up next: '+schedLabel(tom)+'.'));
-  }else{
-    card.append(h('p',{class:'tiny dim',style:'margin:2px 0 8px'},'Then tomorrow: '+schedLabel(tom)+'.'));
-    if(today.tpl)card.append(h('button',{class:'btn primary sm',onclick:()=>startFromTemplate(today.tpl)},
-      'Start '+today.tpl.name));
-    else card.append(h('button',{class:'btn sm',onclick:()=>{
-      scheduleSheet();
-    }},'Link a template to this day'));
-  }
-  return card;
 }
 /* ---- editor ---- */
 function scheduleSheet(){
@@ -4507,6 +5401,11 @@ function switchTab(t){
   $$('nav button').forEach(b=>b.classList.toggle('on',b.dataset.tab===t));
   $$('.page').forEach(p=>p.classList.toggle('active',p.id==='page-'+t));
   $('#htitle').textContent={log:'IronLog',templates:'Templates',history:'History',progress:'Progress',body:'Body'}[t];
+  // per-tab actions beside the cog — creating a template is the Templates
+  // tab's own verb, so it lives in the title bar rather than a giant button
+  const acts=$('#hacts');
+  if(acts)acts.replaceChildren(...(t==='templates'
+    ?[h('button',{class:'icon-btn','aria-label':'New template',onclick:()=>tplEditor(null)},ic('plus','lg'))]:[]));
   const m=$('main');
   if(m)m.scrollTop=0;
   renderTab();
@@ -4572,6 +5471,8 @@ async function boot(){
   // clearance (see body.aphone). Set once: the display mode cannot change
   // within a WebAPK's lifetime, and a browser tab needs no floor.
   if(IS_ANDROID&&isStandalone())document.body.classList.add('aphone');
+  // installed iOS app: the top-edge colour sampler and the keyboard healer
+  if(IS_IOS&&isStandalone())document.body.classList.add('ios-sa');
   await loadAll();
   await seedBackfill();
   S.set={...DEF,...((await kvGet('settings'))||{})};
@@ -4591,9 +5492,11 @@ async function boot(){
   $('#rt-skip').addEventListener('click',skipRest);
   let tickN=0;
   setInterval(()=>{
+    resumeCheck(Date.now());   // a wall-clock jump means we were frozen (IOS27)
     const el=$('#wo-dur');
     if(el&&S.active)el.textContent=fmtDur((Date.now()-S.active.startedAt)/1000);
     fixShell();   // heals a short standalone viewport within 1 s, event or not
+    healShrink(); // …and one the keyboard left behind (IOS27)
     if(++tickN%60===0)schedTick();
   },1000);
   schedTick();
@@ -4629,6 +5532,15 @@ async function boot(){
     const a=document.activeElement;
     if(!a||!(a.matches&&a.matches('input,textarea')))window.scrollTo(0,0);
   },60));
+  // once the keyboard has fully gone, win back a window it shrank (IOS27)
+  let shrinkT=null;
+  const healSoon=()=>{clearTimeout(shrinkT);shrinkT=setTimeout(()=>{if(!isTyping()){healShrink();fixShell();}},220);};
+  const noteFocus=()=>{SHRINK.focusAt=Date.now();};
+  addEventListener('focusin',noteFocus);addEventListener('focusout',noteFocus);
+  addEventListener('focusout',healSoon);
+  if(window.visualViewport)visualViewport.addEventListener('resize',healSoon);
+  healShrink();   // measure the yardstick now, before any keyboard can shrink it
+  addEventListener('pageshow',()=>{RESUME.last=0;resumeCheck(Date.now());});
   function fixShell(){
     const plan=shellPlan({
       ios:IS_IOS,
@@ -4663,6 +5575,7 @@ async function boot(){
   // not depend on it for recovery.
   addEventListener('resize',fixShell);
   addEventListener('orientationchange',()=>{
+    SHRINK.base=0;   // a new orientation has its own honest height
     document.documentElement.style.height='';
     document.body.style.height='';
     document.body.classList.remove('vfix');
@@ -4689,7 +5602,11 @@ async function boot(){
     ghost,applyTheme,themeIsLight,SHEETS,
     exportJSON,importJSON,APP_VER,
     // atomic restore, live PR re-derivation, autosave flush, local dates
-    recheckPRs,saveActive,flushActive,backupFileName,bestWeightGuess};
+    recheckPRs,saveActive,flushActive,backupFileName,bestWeightGuess,
+    // v5.8: redesign + Technogym presets + workout editing
+    TG,tgPlot,tgSuggest,tgBulkSheet,tgPresetSheet,mechFromPlot,saveWorkoutEdit,rederivePRs,
+    editWorkoutSheet,workoutSheet,weekStats,menuSheet,pickExercises,settingsSheet,
+    viewportShrunk,remeasureViewport,healShrink,SHRINK,resumeCheck,RESUME};
   switchTab('log');
   applyLaunchIntent();
 }

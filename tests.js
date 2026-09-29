@@ -1,5 +1,7 @@
 /* IronLog regression suite.
-   Run from the console on a loaded app:   await __iltest()
+   Load it into the running app from the console, then run it:
+     document.head.append(Object.assign(document.createElement('script'),{src:'tests.js'}))
+     await __iltest()                    // or __iltest({stress:false})
    Snapshots the database first and restores it afterwards, so it is safe to
    run against a real install — but prefer a scratch profile anyway.
 
@@ -8,7 +10,9 @@
    fatigue ramp, export/import round trip, v4/v5.0 backward compatibility,
    PWA assets, all-or-nothing restore, PREV set matching, live PR flags,
    double-tap guards, local dates, autosave-on-hide, the service worker's
-   fetch strategy, and a render stress test. */
+   fetch strategy, Technogym presets, editing a finished workout, the v5.8
+   redesign's contracts, the iOS 27 home-screen fixes, 5.7 ⇄ 5.8 data
+   compatibility, and a render stress test. */
 (function(){
 const R=[];let only=null;
 const ok=(name,cond,detail)=>{R.push({name,pass:!!cond,detail:cond?(detail||''):('FAILED '+(detail||''))});return !!cond;};
@@ -33,6 +37,9 @@ function norm(v){
 }
 const uid=()=>Math.random().toString(36).slice(2,10)+Date.now().toString(36);
 const $$=sel=>[...document.querySelectorAll(sel)];
+// the sheet on top. Not `.overlay:last-of-type`: that is the last DIV among
+// body's children, and a celebration effect appended after the sheet is one
+const topSheet=()=>{const o=document.querySelectorAll('.overlay');return o[o.length-1]||document.createElement('div');};
 
 function mkWorkout(exId,sets,ts,name){
   return {id:uid(),name:name||'Test',finishedAt:ts,dur:3600,notes:'',
@@ -952,8 +959,8 @@ window.__iltest=async function(opts){
       il.S.templates=[{id:'t_e2e',name:'E2E Push',pos:0,exs:[{exId:'x06',sets:3,reps:5,w:100,rpe:null}]}];
       il.S.active=null;
       il.switchTab('templates');await sleep(60);
-      [...document.querySelectorAll('#page-templates .card')].find(c=>/E2E Push/.test(c.textContent))
-        .querySelector('.btn.primary').click();
+      [...[...document.querySelectorAll('#page-templates .card')].find(c=>/E2E Push/.test(c.textContent))
+        .querySelectorAll('button')].find(b=>/^\s*Start\s*$/.test(b.textContent)).click();
       await sleep(250);
       document.querySelector('#exc0 .setrow .chk').click();await sleep(60);
       const s0=il.S.active.exs[0].sets[0];
@@ -992,7 +999,7 @@ window.__iltest=async function(opts){
       a.w=95;rowA.querySelector('.chk').click();await sleep(60);         // re-tick it below your best
       ok('PR: a set re-ticked below your best is not saved as a PR',a.done&&!a.pr,'pr='+a.pr);
       rowB.querySelector('.set-type').click();await sleep(350);           // delete the 103
-      [...document.querySelectorAll('.overlay .btn.danger')].find(x=>/Delete set/.test(x.textContent)).click();
+      [...document.querySelectorAll('.overlay .menu-row.danger')].find(x=>/Delete set/.test(x.textContent)).click();
       await sleep(300);
       ok('PR: deleting a set forgets its numbers',il.S.records[px.id].w.v===100&&!a.pr,
         'best now '+il.S.records[px.id].w.v);
@@ -1028,7 +1035,7 @@ window.__iltest=async function(opts){
       // while the menu sheet is fading out
       il.switchTab('templates');await sleep(60);
       document.querySelector('#page-templates .card .icon-btn').click();await sleep(450);
-      const dup=[...document.querySelectorAll('.overlay .btn')].find(x=>/Duplicate/.test(x.textContent));
+      const dup=[...document.querySelectorAll('.overlay .menu-row')].find(x=>/Duplicate/.test(x.textContent));
       const rc=dup.getBoundingClientRect(),cx=rc.left+rc.width/2,cy=rc.top+rc.height/2;
       const tap=()=>{const el=document.elementFromPoint(cx,cy);if(el)el.click();return el;};
       tap();const second=tap();
@@ -1180,7 +1187,426 @@ window.__iltest=async function(opts){
       ok('sw: the opaque CDN script is still cached for offline use',sw.get(cdn)===opaque);
     }
 
-    /* ---------- 25. stress test ---------- */
+    /* ---------- 25. Technogym presets for the movement plotter ---------- */
+    {
+      const tg=il.TG;
+      ok('technogym: presets span Selection, Pure Strength and cable stations',
+        tg.length>=25&&['sel','pure','cable'].every(l=>tg.some(p=>p.line===l)),tg.length+' presets');
+      const pushdown=il.S.ex.get('x32');
+      const off=tg.filter(p=>{
+        const c=il.plotCalc(il.tgPlot(p,pushdown));
+        return p.ratio!=null?Math.abs(c.ratio-p.ratio)>.005:!(c.ratio>.4&&c.ratio<=1.0001);
+      });
+      ok('technogym: every preset plots to exactly the leverage it states',!off.length,off.map(p=>p.id).join(', ')||'all match');
+      const r=id=>il.plotCalc(il.tgPlot(tg.find(p=>p.id===id),pushdown)).ratio;
+      ok('technogym: a 45° sled falls out at sin 45°, a vertical press at 1:1',near(r('pure-linear'),Math.SQRT1_2,.01)&&near(r('pure-vertical'),1,.001));
+      ok('technogym: a direct cable is 1:1, a crossover 2:1',near(r('sel-lat'),1,.001)&&near(r('cable-cross'),.5,.001));
+      const cmU=il.S.set.heightCm||175;
+      const roms=tg.map(p=>il.plotCalc(il.tgPlot(p,pushdown)).romCm*175/cmU);
+      ok('technogym: every working path is a realistic 30–60 cm for a 175 cm lifter',roms.every(v=>v>=30&&v<=60),
+        Math.round(Math.min(...roms))+'–'+Math.round(Math.max(...roms))+' cm');
+      const sug=id=>(il.tgSuggest(il.S.ex.get(id))[0]||{}).id;
+      ok('technogym: suggests the right machine for the stock exercises',
+        sug('x48')==='sel-chest'&&sug('x17')==='sel-lat'&&sug('x39')==='sel-legext'&&sug('x47')==='sel-pec'
+        &&sug('x32')==='cable-dap'&&sug('x46')==='cable-cross'&&sug('x36')==='pure-hack',
+        ['x48','x17','x39','x47','x32','x46','x36'].map(sug).join(' '));
+      ok('technogym: never offers a preset for free weights or cardio',
+        !il.tgSuggest(il.S.ex.get('x06')).length&&!il.tgSuggest(il.S.ex.get('c01')).length);
+      ok('technogym: finds machines you created by their name',
+        (il.tgSuggest({id:'u_tg',name:'TG Leg Extension',m:'Quads',s:[],e:'Machine'})[0]||{}).id==='sel-legext');
+      // through the real plotter: Apply the suggestion, then Save
+      document.querySelectorAll('.overlay').forEach(o=>o.remove());il.SHEETS.length=0;
+      const mx={id:'t_tgm',name:'Chest Press Machine',m:'Chest',s:['Triceps'],e:'Machine'};
+      il.S.ex.set(mx.id,mx);await il.dbPut('exercises',mx);
+      il.movementSheet(mx,()=>{});await sleep(300);
+      [...document.querySelectorAll('.overlay .tg-bar button')].find(b=>/Apply/.test(b.textContent)).click();await sleep(120);
+      [...document.querySelectorAll('.overlay .btn.primary')].find(b=>/Save calibration/.test(b.textContent)).click();await sleep(300);
+      ok('technogym: Apply + Save stores the preset’s leverage',
+        mx.mech&&near(mx.mech.ratio,.7,.001)&&mx.mech.preset==='sel-chest'&&Math.abs(mx.mech.romCm-40*cmU/175)<=1.5,
+        mx.mech?'×'+mx.mech.ratio+' '+mx.mech.romCm+' cm '+mx.mech.preset:'not saved');
+      ok('technogym: the calibration keeps 5.7’s shape — new fields are purely additive',
+        mx.mech&&['kind','pos','fx','ratio','romCm','at','hx0','hy0','hx1','hy1','wx0','wy0','wx1','wy1'].every(k=>typeof mx.mech[k]==='number'||typeof mx.mech[k]==='string'));
+      // "Measure it": 50 cm of travel, 30 cm of stack rise → ×0.60 exactly
+      document.querySelectorAll('.overlay').forEach(o=>o.remove());il.SHEETS.length=0;
+      il.movementSheet(mx,()=>{});await sleep(300);
+      const ms=document.querySelector('.overlay .tg-measure');ms.open=true;
+      const [mH,mR]=ms.querySelectorAll('input');mH.value='50';mR.value='30';
+      [...ms.querySelectorAll('button')].find(b=>/Use these/.test(b.textContent)).click();await sleep(60);
+      [...document.querySelectorAll('.overlay .btn.primary')].find(b=>/Save calibration/.test(b.textContent)).click();await sleep(300);
+      ok('technogym: “Measure it” makes the leverage exactly rise ÷ travel',
+        near(mx.mech.ratio,.6,.002)&&Math.abs(mx.mech.romCm-50)<=1,'×'+mx.mech.ratio+' over '+mx.mech.romCm+' cm');
+      // bulk: calibrate every matched machine, leave the rest alone
+      for(const id of['x39','x40','x47','x44'])delete il.S.ex.get(id).mech;
+      // …including one you have already calibrated by hand, which it must not touch
+      const x48=il.S.ex.get('x48'),x48was=x48.mech;
+      const own={kind:'lever',pos:'seated',fx:30,ratio:.55,romCm:41,at:now-DAY,hx0:34,hy0:58,hx1:48,hy1:56,wx0:82,wy0:84,wx1:82,wy1:76};
+      x48.mech={...own};
+      document.querySelectorAll('.overlay').forEach(o=>o.remove());il.SHEETS.length=0;
+      il.tgBulkSheet();await sleep(300);
+      const goB=[...document.querySelectorAll('.overlay .btn.primary')].find(b=>/Calibrate \d+ machine/.test(b.textContent));
+      ok('technogym: bulk calibration pre-selects every machine with a match',!!goB,goB?goB.textContent:'no button');
+      if(goB)goB.click();
+      await sleep(500);
+      ok('technogym: …and calibrates them with their presets',
+        ['x39','x40','x47'].every(id=>il.S.ex.get(id).mech&&il.S.ex.get(id).mech.preset),
+        ['x39','x40','x47'].map(id=>(il.S.ex.get(id).mech||{}).preset).join(' '));
+      ok('technogym: a machine with no matching preset is left for you to plot',!il.S.ex.get('x44').mech,'Standing Calf Raise');
+      ok('technogym: …and one you calibrated yourself is never overwritten',
+        JSON.stringify(x48.mech)===JSON.stringify(own),'Chest Press ×'+(x48.mech||{}).ratio);
+      if(x48was)x48.mech=x48was;else delete x48.mech;
+      document.querySelectorAll('.overlay').forEach(o=>o.remove());il.SHEETS.length=0;
+      try{history.replaceState({ilSheet:0},'');}catch(e){}
+      il.S.ex.delete(mx.id);
+    }
+
+    /* ---------- 26. editing a finished workout ---------- */
+    {
+      const ex26={id:'t_ed',name:'T Edit Lift',m:'Chest',s:[],e:'Barbell'};
+      il.S.ex.set(ex26.id,ex26);await il.dbPut('exercises',ex26);
+      const w1=mkWorkout(ex26.id,[[100,5]],now-20*DAY,'E1'),w2=mkWorkout(ex26.id,[[1000,5]],now-10*DAY,'E2 typo'),
+            w3=mkWorkout(ex26.id,[[105,5]],now-3*DAY,'E3');
+      w1.exs[0].sets[0].pr=1;w2.exs[0].sets[0].pr=1;     // as live logging left them: club 100, then the typo
+      // an old trophy today's rules would not award (a first session, under any
+      // milestone): editing a LATER workout must leave it exactly as logged
+      const w0=mkWorkout(ex26.id,[[55,5]],now-30*DAY,'E0');w0.exs[0].sets[0].pr=1;
+      il.S.workouts=[w0,w1,w2,w3];
+      for(const w of il.S.workouts)await il.dbPut('workouts',w);
+      ok('edit: NEGATIVE CONTROL — a typo blocks every real record after it',
+        !w3.exs[0].sets[0].pr&&il.computeRecords(ex26.id).w.v===1000,'best on record: '+il.computeRecords(ex26.id).w.v);
+      const fixed=JSON.parse(JSON.stringify(w2));fixed.exs[0].sets[0].w=100;
+      await il.saveWorkoutEdit(w2,fixed);
+      const W=id=>il.S.workouts.find(x=>x.id===id);
+      ok('edit: the corrected set stops being a record',!W(w2.id).exs[0].sets[0].pr);
+      ok('edit: the genuine record after it gets its trophy back',W(w3.id).exs[0].sets[0].pr===1);
+      ok('edit: records follow the correction',il.computeRecords(ex26.id).w.v===105);
+      ok('edit: earlier sessions are read, never rewritten',W(w1.id).exs[0].sets[0].pr===1&&W(w0.id).exs[0].sets[0].pr===1);
+      ok('edit: the re-derived flags are saved, not just shown',
+        ((await il.allOf('workouts')).find(x=>x.id===w3.id).exs[0].sets[0].pr)===1);
+      // "forgot to press Finish": a 14 h session corrected to the real hour
+      const long=mkWorkout(ex26.id,[[90,5]],now-DAY,'Forgot');
+      long.startedAt=now-DAY-14*3600e3;long.dur=14*3600;
+      il.S.workouts.push(long);await il.dbPut('workouts',long);
+      const lf=JSON.parse(JSON.stringify(long));lf.dur=3600;lf.finishedAt=lf.startedAt+3600e3;
+      await il.saveWorkoutEdit(long,lf);
+      ok('edit: a forgotten Finish can be corrected to the real duration',
+        W(long.id).dur===3600&&W(long.id).finishedAt===long.startedAt+3600e3);
+      // and the real UI: History → workout → Edit → change reps → Save
+      document.querySelectorAll('.overlay').forEach(o=>o.remove());il.SHEETS.length=0;
+      il.workoutSheet(W(w3.id));await sleep(300);
+      [...document.querySelectorAll('.overlay button')].find(b=>/Edit workout/.test(b.textContent)).click();await sleep(400);
+      const repsIn=topSheet().querySelectorAll('.edrow:not(.sethead) input')[1];
+      repsIn.value='8';repsIn.dispatchEvent(new Event('input',{bubbles:true}));
+      [...topSheet().querySelectorAll('.btn.primary')].find(b=>/Save changes/.test(b.textContent)).click();
+      await sleep(500);
+      ok('edit: the Edit sheet saves what you type',W(w3.id).exs[0].sets[0].r===8,'reps '+W(w3.id).exs[0].sets[0].r);
+      document.querySelectorAll('.overlay').forEach(o=>o.remove());il.SHEETS.length=0;
+      try{history.replaceState({ilSheet:0},'');}catch(e){}
+      il.S.ex.delete(ex26.id);il.S.workouts=[];
+    }
+
+    /* ---------- 27. v5.8 redesign: the contracts behind the looks ---------- */
+    {
+      document.querySelectorAll('.overlay').forEach(o=>o.remove());il.SHEETS.length=0;
+      // light-theme switches: 5.7's `body.light .tgl` out-ranked `.tgl.on`
+      const wasLight=document.body.classList.contains('light');
+      document.body.classList.add('light');
+      const on=document.createElement('button');on.className='tgl on';document.body.append(on);
+      const offT=document.createElement('button');offT.className='tgl';document.body.append(offT);
+      const bgOn=getComputedStyle(on).backgroundColor,bgOff=getComputedStyle(offT).backgroundColor;
+      const grn=(()=>{const d=document.createElement('div');d.style.color=getComputedStyle(document.body).getPropertyValue('--grn');document.body.append(d);const c=getComputedStyle(d).color;d.remove();return c;})();
+      ok('ui: an ON switch reads as on in the light theme (5.7 painted it grey)',bgOn===grn&&bgOn!==bgOff,bgOn+' vs off '+bgOff);
+      on.remove();offT.remove();if(!wasLight)document.body.classList.remove('light');
+      // the active workout
+      il.S.workouts=[mkWorkout('x06',[[100,5]],now-2*DAY)];
+      il.S.active={id:uid(),name:'UI test',startedAt:now-600e3,notes:'',exs:[
+        {exId:'x06',notes:'',sets:[{t:'N',w:100,r:5,rpe:8,dur:null,dist:null,done:false},{t:'N',w:100,r:5,rpe:8,dur:null,dist:null,done:false}]}]};
+      il.S.prev={};il.S.records={};
+      il.switchTab('log');await sleep(80);
+      const bar=document.querySelector('#page-log .wo-bar');
+      ok('ui: the clock and Finish live in a sticky bar',!!bar&&getComputedStyle(bar).position==='sticky'
+        &&!!bar.querySelector('#wo-dur')&&!!bar.querySelector('.btn.green'));
+      ok('ui: the bar tallies done of total sets',document.querySelector('#wo-sets').textContent==='0'&&document.querySelector('#wo-total').textContent==='2');
+      document.querySelector('#exc0 .setrow .chk').click();await sleep(60);
+      ok('ui: ticking a set moves the exercise’s progress chip',document.querySelector('#exc0 .ex-prog').textContent==='1/2'
+        &&document.querySelector('#wo-sets').textContent==='1');
+      document.querySelectorAll('#exc0 .setrow .chk')[1].click();await sleep(60);
+      ok('ui: …and marks it Done when every set is in',/Done/.test(document.querySelector('#exc0 .ex-prog').textContent));
+      document.querySelector('#rt-skip').click();
+      document.querySelector('#exc0 .icon-btn').click();await sleep(300);
+      const groups=[...document.querySelectorAll('.overlay .menu-group')];
+      const lastRow=groups.length?[...groups[groups.length-1].querySelectorAll('.menu-row')].pop():null;
+      ok('ui: menus are grouped rows with the destructive action set apart, last',
+        groups.length>=3&&!!lastRow&&lastRow.classList.contains('danger'),groups.length+' groups');
+      document.querySelectorAll('.overlay').forEach(o=>o.remove());il.SHEETS.length=0;
+      il.S.active=null;
+      // Today: the scheduled template is the headline action
+      il.S.templates=[{id:'t_today',name:'Push Day',pos:0,exs:[{exId:'x06',sets:3,reps:5}]}];
+      const mid=new Date(now);mid.setHours(0,0,0,0);
+      il.S.set.sched={on:1,mode:'cycle',anchor:mid.getTime(),remind:0,at:'17:30',lastNotif:'',
+        days:[{label:'Push Day',tplId:'t_today'},{rest:1,label:'Rest'}]};
+      il.S.workouts=[mkWorkout('x06',[[100,5]],now-2*DAY)];
+      il.switchTab('log');await sleep(60);
+      const hero=document.querySelector('#page-log .hero');
+      ok('ui: Today leads with the scheduled session and starts it in one tap',
+        !!hero&&/Start Push Day/.test(hero.textContent)&&!!hero.querySelector('.btn.primary'));
+      il.S.set.sched.anchor=mid.getTime()-864e5;          // today is now the rest slot
+      il.switchTab('log');await sleep(60);
+      ok('ui: …and says so on a rest day',/Rest day/.test(document.querySelector('#page-log .hero .hero-t').textContent));
+      il.S.set.sched=null;il.S.templates=[];
+      // the week strip
+      const d0=new Date(now);d0.setHours(12,0,0,0);
+      const monday=d0.getTime()-((d0.getDay()+6)%7)*864e5;
+      il.S.workouts=[mkWorkout('x06',[[100,5]],monday),mkWorkout('x06',[[100,5]],monday-864e5)];
+      const wk=il.weekStats(now);
+      ok('ui: the week strip counts this week only, Monday first',wk.n===1&&wk.days[0]===true,JSON.stringify(wk.days));
+      // the picker opens on Recent, most recently trained first
+      il.S.workouts=[mkWorkout('x06',[[100,5]],now-5*DAY),mkWorkout('x19',[[80,8]],now-DAY)];
+      il.pickExercises({onDone:()=>{}});await sleep(300);
+      const chipOn=document.querySelector('.overlay .pk-chips .chip.on');
+      const first=document.querySelector('.overlay .ex-row .bold');
+      ok('ui: the picker opens on Recent, most recently trained first',
+        !!chipOn&&/Recent/.test(chipOn.textContent)&&/Barbell Row/.test(first.textContent),first?first.textContent:'');
+      const srch=document.querySelector('.overlay input[type=search]');
+      srch.value='leg ext';srch.dispatchEvent(new Event('input',{bubbles:true}));await sleep(60);
+      ok('ui: typing searches the whole library, whatever the filter',
+        [...document.querySelectorAll('.overlay .ex-row .bold')].some(b=>/Leg Extension/.test(b.textContent)));
+      document.querySelectorAll('.overlay').forEach(o=>o.remove());il.SHEETS.length=0;
+      // settings: grouped, repair switch folded away
+      document.querySelector('#gearbtn').click();await sleep(300);
+      const adv=document.querySelector('.overlay details.set-adv');
+      ok('ui: settings are grouped, the display repair switch folded under Advanced',
+        document.querySelectorAll('.overlay .set-grp').length>=5&&!!adv&&!adv.open&&/Fill the screen/.test(adv.textContent));
+      // sheets: drag the grabber down to dismiss; a nudge springs back
+      const sh=document.querySelector('.overlay .sheet'),gr=sh.querySelector('.grabber');
+      const r0=gr.getBoundingClientRect(),y0=r0.top+2,x0=r0.left+r0.width/2;
+      const pe=(t,y)=>gr.dispatchEvent(new PointerEvent(t,{bubbles:true,clientX:x0,clientY:y,pointerId:7,isPrimary:true}));
+      pe('pointerdown',y0);pe('pointermove',y0+30);await sleep(400);pe('pointerup',y0+30);await sleep(350);
+      ok('ui: a small drag springs back',document.querySelectorAll('.overlay').length===1&&!sh.style.transform);
+      pe('pointerdown',y0);pe('pointermove',y0+80);pe('pointermove',y0+180);pe('pointerup',y0+180);await sleep(400);
+      ok('ui: dragging the grabber down dismisses the sheet',document.querySelectorAll('.overlay').length===0);
+      try{history.replaceState({ilSheet:0},'');}catch(e){}
+      // one icon family: no emoji left in headings or menu rows
+      il.S.workouts=[mkWorkout('x06',[[100,5]],now-DAY)];
+      const emoji=/\p{Extended_Pictographic}/u,found=[];
+      for(const t of['log','templates','history','progress','body']){
+        il.switchTab(t);await sleep(40);
+        for(const el of document.querySelectorAll('#page-'+t+' h3, #page-'+t+' .hero-eb'))if(emoji.test(el.textContent))found.push(el.textContent.trim());
+      }
+      ok('ui: headings use the icon set, not emoji',!found.length,found.join(' | '));
+      // every icon-only button carries a name for screen readers
+      const unnamed=[];
+      for(const t of['log','templates','history','body']){
+        il.switchTab(t);await sleep(40);
+        for(const b of document.querySelectorAll('#page-'+t+' button,header button'))
+          if(!b.textContent.trim()&&!b.getAttribute('aria-label'))unnamed.push(t+':'+b.className);
+      }
+      ok('a11y: every icon-only button is labelled',!unnamed.length,unnamed.slice(0,5).join(', '));
+      il.S.workouts=[];
+    }
+
+    /* ---------- 28. iOS 27 home-screen app bugs ----------
+       No iPhone in the loop, so each fix is pinned at the level a device can't
+       fool: the decisions take the numbers devices report, and the DOM is
+       checked for exactly what WebKit looks for. */
+    {
+      document.querySelectorAll('.overlay').forEach(o=>o.remove());il.SHEETS.length=0;
+      // (1) the blur: WebKit extends the colour of a REAL fixed element with a
+      // solid background touching the top edge; the root's own background, a
+      // pseudo-element and a gradient are all invisible to it
+      const sbar=document.getElementById('sbar'),hdr=document.querySelector('header');
+      const hadSa=document.body.classList.contains('ios-sa');
+      const alpha=c=>{const m=c.match(/rgba?\(([^)]+)\)/);if(!m)return 0;const p=m[1].split(',');return p.length>3?+p[3]:1;};
+      const topEdge=()=>[...document.querySelectorAll('body *')].filter(el=>{
+        const cs=getComputedStyle(el);if(cs.position!=='fixed'||cs.display==='none')return false;
+        const r=el.getBoundingClientRect();
+        return r.top<=0&&r.left<=0&&r.right>=document.documentElement.clientWidth&&r.height>=1&&alpha(cs.backgroundColor)===1;
+      });
+      document.body.classList.remove('ios-sa');
+      ok('ios27: a Safari tab or Android never shows the status-bar sampler',!sbar||getComputedStyle(sbar).display==='none');
+      /* NEGATIVE CONTROL: this is 5.7's top edge. Its opaque band was
+         header::before, and the header itself is not fixed, so WebKit found no
+         element at all and blurred the header instead. */
+      ok('ios27: NEGATIVE CONTROL — without the sampler nothing solid touches the top edge',
+        topEdge().length===0&&getComputedStyle(hdr).position!=='fixed'
+          &&getComputedStyle(hdr,'::before').content!=='none',
+        topEdge().map(e=>e.id||e.tagName).join(','));
+      document.body.classList.add('ios-sa');
+      const found=topEdge(),scs=sbar?getComputedStyle(sbar):null;
+      ok('ios27: the installed iOS app gives WebKit exactly one solid element at the top edge',
+        !!sbar&&found.length===1&&found[0]===sbar,found.map(e=>e.id||e.tagName).join(',')||'none');
+      ok('ios27: …flat colour (a gradient is not a colour to extend), above the header, never in the way',
+        !!scs&&scs.backgroundImage==='none'&&+scs.zIndex>+getComputedStyle(hdr).zIndex&&scs.pointerEvents==='none'
+          &&sbar.getAttribute('aria-hidden')==='true',scs?scs.zIndex+' over '+getComputedStyle(hdr).zIndex:'no #sbar');
+      // theme-color, the sampler and the header band are one colour, both themes
+      const hex=h=>'rgb('+[1,3,5].map(i=>parseInt(h.slice(i,i+2),16)).join(', ')+')';
+      const wasTheme=il.S.set.theme,agree=[];
+      for(const th of['dark','light']){
+        il.S.set.theme=th;il.applyTheme();
+        const meta=document.querySelector('meta[name="theme-color"]').getAttribute('content');
+        const band=getComputedStyle(document.body).getPropertyValue('--bgtop').trim();
+        const col=sbar?getComputedStyle(sbar).backgroundColor:'no #sbar';
+        agree.push({th,meta,band,col,same:hex(meta)===col&&meta.toLowerCase()===band.toLowerCase()});
+      }
+      il.S.set.theme=wasTheme;il.applyTheme();
+      ok('ios27: theme-color, the sampler and the header band agree in both themes',agree.every(a=>a.same),JSON.stringify(agree));
+      if(!hadSa)document.body.classList.remove('ios-sa');
+
+      // (2) the keyboard: the first raise can leave the window short for good
+      const vs=il.viewportShrunk;
+      // an iPhone 17 Pro, installed: 874pt tall, and the bug takes the 62pt status bar
+      const KB={ios:true,standalone:true,focused:false,sinceFocus:2000,vvH:812,vvTop:0,curH:812,curW:402,base:874};
+      ok('ios27: a window the keyboard left 62pt short is caught',vs(KB)===true);
+      ok('ios27: …never while a field has focus (the keyboard may still be up)',vs({...KB,focused:true})===false);
+      ok('ios27: …nor while it is still sliding away',vs({...KB,sinceFocus:60})===false);
+      ok('ios27: …nor while the visual viewport is still inset',vs({...KB,vvH:480})===false);
+      ok('ios27: …nor mid caret-pan',vs({...KB,vvTop:30})===false);
+      ok('ios27: a full-height window, or rounding noise, is left alone',
+        vs({...KB,vvH:874,curH:874})===false&&vs({...KB,vvH:872,curH:872})===false);
+      ok('ios27: Safari tabs and Android are never touched',vs({...KB,standalone:false})===false&&vs({...KB,ios:false})===false);
+      ok('ios27: no yardstick yet, no verdict',vs({...KB,base:0})===false);
+      // healShrink: the yardstick, the cheap sentinel first, and the circuit breaker
+      const SH=il.SHRINK,keepSH={...SH};
+      Object.assign(SH,{base:0,w:0,tries:0,wins:0});
+      const env=o=>({...KB,vvH:874,curH:874,...o});
+      il.healShrink(env({focused:true,vvH:480,curH:480}),()=>480);
+      ok('ios27: a keyboard-up window never becomes the yardstick',SH.base===0);
+      il.healShrink(env({}),()=>874);
+      ok('ios27: the yardstick is the tallest honest window',SH.base===874&&SH.tries===0);
+      const bodyStyle=new MutationObserver(()=>{});
+      bodyStyle.observe(document.body,{attributes:true,attributeFilter:['style']});
+      const won=il.healShrink(env({vvH:812,curH:812}),()=>874);
+      ok('ios27: a shrunk window is laid out again, by the empty sentinel alone when that is enough',
+        won===true&&SH.tries===1&&SH.wins===1&&bodyStyle.takeRecords().length===0);
+      const miss=il.healShrink(env({vvH:812,curH:812}),()=>812);
+      ok('ios27: …and by the whole body when it is not',miss===false&&SH.tries===2&&bodyStyle.takeRecords().length>=2
+        &&document.body.style.display==='');
+      il.healShrink(env({vvH:812,curH:812}),()=>812);il.healShrink(env({vvH:812,curH:812}),()=>812);
+      const t4=SH.tries;
+      il.healShrink(env({vvH:812,curH:812}),()=>812);
+      ok('ios27: three misses and it stops trying',t4===4&&SH.tries===4,'tries '+SH.tries+' wins '+SH.wins);
+      bodyStyle.disconnect();
+      Object.assign(SH,{base:874,w:402,tries:0,wins:0});
+      il.healShrink(env({curW:874,vvH:402,curH:402}),()=>402);
+      ok('ios27: a new width (rotation, iPad windows) starts a new yardstick',SH.base===402&&SH.w===874&&SH.tries===0);
+      Object.assign(SH,keepSH);
+      // laying the window out again must not cost the user their place
+      const mainEl=document.querySelector('main'),pad=document.createElement('div');
+      pad.style.height='4000px';mainEl.append(pad);
+      mainEl.scrollTop=700;const at0=mainEl.scrollTop;
+      il.remeasureViewport(true);
+      // (Chromium happens to keep scroll offsets through a display flip anyway;
+      // the explicit restore is for an engine that drops them.)
+      ok('ios27: the relayout keeps the scroll position',at0>0&&mainEl.scrollTop===at0&&document.body.style.display==='',
+        at0+' → '+mainEl.scrollTop);
+      pad.remove();mainEl.scrollTop=0;
+
+      // (3) resume: iOS 27 can bring an installed app back with no event at all
+      il.S.active=null;il.S.set.sched=null;il.switchTab('log');await sleep(40);
+      const n0=il.RESUME.n,stale=document.querySelector('#page-log').firstElementChild;
+      const t0r=Date.now();il.RESUME.last=t0r;
+      const tick=il.resumeCheck(t0r+1000);
+      ok('ios27: the 1 s ticker is not a resume',tick===false&&il.RESUME.n===n0&&stale.isConnected);
+      il.RESUME.last=t0r;
+      const back=il.resumeCheck(t0r+10*60e3);
+      ok('ios27: a jump in the wall clock is a resume, events or not',back===true&&il.RESUME.n===n0+1);
+      ok('ios27: …and Today is redrawn for the new moment',!stale.isConnected&&!!document.querySelector('#page-log').firstElementChild);
+      il.RESUME.last=Date.now();
+
+      // (4) a frozen app gets no warning, so a ticked set can't wait on the debounce
+      il.S.active={id:uid(),name:'Tick',startedAt:now-60e3,notes:'',exs:[{exId:'x06',notes:'',
+        sets:[{t:'N',w:100,r:5,rpe:8,dur:null,dist:null,done:false},{t:'N',w:100,r:5,rpe:8,dur:null,dist:null,done:false}]}]};
+      il.S.prev={};il.S.records={};il.S.workouts=[];
+      await il.flushActive();
+      il.switchTab('log');await sleep(60);
+      document.querySelector('#exc0 .setrow .chk').click();
+      await sleep(40);   // far inside the 250 ms autosave debounce
+      const disk=await il.kvGet('active');
+      ok('ios27: a ticked set is on disk at once',!!disk&&disk.exs[0].sets[0].done===true&&disk.exs[0].sets[1].done===false);
+      document.querySelector('#rt-skip').click();
+      il.S.active=null;await il.flushActive();
+      document.querySelectorAll('.overlay').forEach(o=>o.remove());il.SHEETS.length=0;
+    }
+
+    /* ---------- 29. 5.7 ⇄ 5.8: data degrades cleanly, both ways ----------
+       Rolling back to 5.7, or bringing a 5.7 backup forward, must just work:
+       no new database version, no new stores, no field that changes meaning.
+       5.8 only ADDS optional fields, which 5.7 carries along untouched. (The
+       browser-level proof, a real 5.7 profile opened by 5.8 and then by 5.7
+       again, is described in the README.) */
+    {
+      document.querySelectorAll('.overlay').forEach(o=>o.remove());il.SHEETS.length=0;
+      // 5.7 opens version 1 of these six stores: a bump would lock it out for good
+      const db=await new Promise((res,rej)=>{const q=indexedDB.open('ironlog');q.onsuccess=()=>res(q.result);q.onerror=()=>rej(q.error);});
+      const stores=[...db.objectStoreNames].sort().join(',');const dbv=db.version;db.close();
+      ok('compat57: same database version and stores, so 5.7 can still open it',
+        dbv===1&&stores==='body,exercises,kv,photos,templates,workouts',dbv+' · '+stores);
+      const ex58=await il.buildExportData();
+      ok('compat57: a 5.8 backup is a file 5.7 accepts (app ironlog, format 1)',ex58.app==='ironlog'&&ex58.version===1);
+      const man58=await (await fetch('manifest.webmanifest')).json();
+      ok('compat57: the manifest id is unchanged, so 5.8 updates the installed app in place',man58.id==='/');
+      // every preset writes a calibration 5.7's plotter can draw and weigh
+      const K57=['lever','cable','sled','direct'],P57=['seated','standing','lying','incline'];
+      const PK=['hx0','hy0','hx1','hy1','wx0','wy0','wx1','wy1'],MK=['kind','pos','fx','ratio','romCm','at',...PK];
+      const badTg=[];
+      for(const p of il.TG){
+        const m=il.mechFromPlot(il.tgPlot(p,il.S.ex.get('x32')),{preset:p.id,track:p.track});
+        const extra=Object.keys(m).filter(k=>!MK.includes(k)).sort().join(',');
+        if(!K57.includes(m.kind)||!P57.includes(m.pos)||!(m.ratio>0)||extra!=='preset,track'
+          ||!['fx','romCm','at',...PK].every(k=>typeof m[k]==='number'&&isFinite(m[k]))
+          ||!PK.every(k=>m[k]>=0&&m[k]<=100))badTg.push(p.id);
+      }
+      ok('compat57: every Technogym preset writes a style, seat and shape 5.7 knows — plus two optional fields',
+        !badTg.length,badTg.join(' ')||il.TG.length+' presets');
+      // a 5.7 backup with everything 5.7 could write
+      const mid57=new Date();mid57.setHours(0,0,0,0);
+      const w57=mkWorkout('x06',[[100,5,8],[100,5,9]],now-2*DAY,'5.7 Upper');w57.startedAt=w57.finishedAt-3600e3;
+      w57.exs[0].sets[0].pr=1;w57.exs[0].notes='5.7 note';
+      const mech57={kind:'lever',pos:'seated',fx:30,ratio:.608,romCm:44,at:now-40*DAY,hx0:47,hy0:55,hx1:34,hy1:57,wx0:80,wy0:76,wx1:80,wy1:68};
+      const v57={app:'ironlog',version:1,exportedAt:'2026-09-20T09:00:00.000Z',
+        settings:{unit:'kg',restSec:150,barWeight:20,plates:[25,20,15,10,5,2.5,1.25],sound:true,vibrate:true,notify:false,
+          theme:'auto',name:'Sam',strScale:1.05,coachOff:['c05'],heightCm:181,shellFix:'auto',
+          sched:{on:1,mode:'cycle',anchor:mid57.getTime(),remind:0,at:'17:30',lastNotif:'',
+            days:[{label:'Upper A',tplId:'tp57'},{rest:1,label:'Rest'}]}},
+        exercises:[{id:'u57',name:'Hammer Strength Row',m:'Back',s:['Biceps'],e:'Machine',custom:true,
+          pin:'Seat 5',restSec:120,edited:1,mech:{...mech57}}],
+        workouts:[w57],templates:[{id:'tp57',name:'Upper A',pos:0,exs:[{exId:'x06',sets:3,reps:5,w:100,rpe:8}]}],
+        body:[{id:'b57',date:now-DAY,key:'Weight',value:82.4}],photos:[],deadSeeds:['x53']};
+      const res57=await il.applyImport(JSON.parse(JSON.stringify(v57)));
+      const out57=await il.buildExportData();
+      const same=(a,b)=>JSON.stringify(norm(a))===JSON.stringify(norm(b));
+      const setOk=Object.keys(v57.settings).every(k=>same(out57.settings[k],v57.settings[k]));
+      ok('compat57: a 5.7 backup imports into 5.8 and exports back unchanged',
+        (!res57||!res57.skipped)&&setOk&&same(out57.exercises.find(x=>x.id==='u57'),v57.exercises[0])
+          &&same(out57.workouts,v57.workouts)&&same(out57.templates,v57.templates)&&same(out57.body,v57.body)
+          &&same(out57.deadSeeds,v57.deadSeeds),out57.workouts.length+' workouts');
+      const u57=il.S.ex.get('u57');
+      ok('compat57: a 5.7 calibration is used as measured, never relabelled a preset',
+        il.mechRatio(u57)===.608&&!u57.mech.preset&&!u57.mech.track);
+      il.movementSheet(u57,()=>{});await sleep(250);
+      document.querySelectorAll('.overlay').forEach(o=>o.remove());il.SHEETS.length=0;
+      try{history.replaceState({ilSheet:0},'');}catch(e){}
+      ok('compat57: just opening it in the 5.8 plotter writes nothing',
+        same((await il.allOf('exercises')).find(x=>x.id==='u57').mech,mech57));
+      // a 5.8 edit, through the real sheet, stores nothing 5.7 doesn't already read
+      il.workoutSheet(il.S.workouts.find(w=>w.id===w57.id));await sleep(300);
+      [...document.querySelectorAll('.overlay button')].find(b=>/Edit workout/.test(b.textContent)).click();await sleep(400);
+      const eRows=topSheet().querySelectorAll('.edrow:not(.sethead)');
+      const eReps=eRows[1].querySelectorAll('input')[1];
+      eReps.value='6';eReps.dispatchEvent(new Event('input',{bubbles:true}));
+      [...topSheet().querySelectorAll('.btn.primary')].find(b=>/Save changes/.test(b.textContent)).click();
+      await sleep(500);
+      document.querySelectorAll('.overlay').forEach(o=>o.remove());il.SHEETS.length=0;
+      try{history.replaceState({ilSheet:0},'');}catch(e){}
+      const st57=(await il.allOf('workouts')).find(w=>w.id===w57.id);
+      const WK=['id','name','notes','startedAt','finishedAt','dur','exs','tplId'],SK=['t','w','r','rpe','dur','dist','done','pr'];
+      ok('compat57: an edited workout keeps 5.7’s shape exactly',
+        Object.keys(st57).every(k=>WK.includes(k))&&st57.exs.every(en=>Object.keys(en).every(k=>['exId','notes','sets','tgt'].includes(k))
+          &&en.sets.every(s=>Object.keys(s).every(k=>SK.includes(k))))&&st57.exs[0].sets[1].r===6,
+        Object.keys(st57).join(','));
+      il.S.ex.delete('u57');
+    }
+
+    /* ---------- 30. stress test ---------- */
     const N=opts.stress===false?0:400;
     if(N){
       const ids=[...il.S.ex.values()].filter(x=>!x.cardio).slice(0,12).map(x=>x.id);
