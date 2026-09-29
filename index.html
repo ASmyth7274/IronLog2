@@ -852,6 +852,16 @@ details.set-adv[open]>summary{color:var(--acc)}
 .hist-row:active{transform:scale(.99)}
 .hist-row .row{gap:8px}
 .hist-sets{font-size:15px;margin-top:5px;line-height:1.45;color:var(--text)}
+/* the record to beat, on each exercise card */
+.ex-pr{display:flex;align-items:center;gap:7px;width:100%;margin:10px 0 2px;padding:7px 11px;border-radius:12px;
+  background:var(--well);font-size:13.5px;font-weight:600;color:var(--text);text-align:left}
+.ex-pr .ic{color:var(--gold)}
+.ex-pr-t{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ex-pr-d{flex:0 0 auto;color:var(--dim);font-size:12px}
+.ex-pr.none,.ex-pr.none .ic{color:var(--dim)}
+.ex-pr.beat{background:rgba(255,207,77,.14);color:var(--gold)}
+body.light .ex-pr.beat{background:#F1E5C7;color:#6B5210}
+body.light .ex-pr.beat .ic{color:#6B5210}
 /* forgot to finish */
 .stale{display:flex;flex-direction:column;gap:10px;margin:0 0 12px;padding:14px;border-radius:16px;
   background:var(--tint);border:1px solid var(--tint-2)}
@@ -1633,9 +1643,10 @@ function computeRecords(exId){
       vol+=workLoad(ex,st)*r;   // tonnage: counts both sides / real leverage
       if(wt>0&&r>0){
         found=true;
-        if(!wr||wt>wr.v)wr={v:wt,date:w.finishedAt};   // heaviest = as typed
+        // tw/r: the set itself, as typed, so a card can say "107.5 kg × 5"
+        if(!wr||wt>wr.v)wr={v:wt,date:w.finishedAt,tw:st.w,r};   // heaviest = as typed
         const e=epley(wt,r);
-        if(e>0&&(!e1||e>e1.v))e1={v:e,date:w.finishedAt};
+        if(e>0&&(!e1||e>e1.v))e1={v:e,date:w.finishedAt,tw:st.w,r};
       }
     }
     if(vol>0&&(!vr||vol>vr.v))vr={v:vol,date:w.finishedAt};
@@ -2983,6 +2994,42 @@ function showStale(){
   const card=staleCard(),bar=$('#page-log .wo-bar');
   if(card&&bar)bar.after(card);
 }
+/* The record to beat, on every exercise card: your best set before today (by
+   est. 1RM — "107.5 kg × 5"), the heaviest weight too when that was a
+   different set, or your furthest and longest for cardio. It reads finished
+   workouts only, never this session's live records, so it keeps saying what
+   you are chasing; once a set today beats it the chip turns gold. Tap it for
+   the exercise's whole history. */
+function prChipEl(en){
+  const ex=S.ex.get(en.exId),rec=computeRecords(en.exId);
+  const beat=en.sets.some(s2=>s2.done&&s2.pr);
+  const unit=' '+S.set.unit+(ex&&ex.uni?'/side':''),isBW=!!(ex&&ex.e==='Bodyweight');
+  const wtxt=s=>isBW?(s.tw?'BW + '+fmtW(s.tw)+unit:'BW'):fmtW(s.tw)+unit;
+  // "old best", not "beat": a milestone can make today's set a PR without it
+  // topping the best set named here, and "old best" stays true either way
+  let txt=null,when=null;
+  if(rec.cardio){
+    const d=rec.dist?fmtW(round1(rec.dist.v))+' '+distUnit():null,t=rec.dur?fmtMin(rec.dur.v):null;
+    if(d||t){
+      txt=beat?'New PR — old best '+[d,t].filter(Boolean).join(' · ')
+        :[d?'Furthest '+d:null,t?(d?'longest ':'Longest ')+t:null].filter(Boolean).join(' · ');
+      when=(rec.dist||rec.dur).date;
+    }
+  }else if(rec.e1rm){
+    let best=wtxt(rec.e1rm)+' × '+rec.e1rm.r;
+    if(rec.w&&rec.w.v>loadOf(ex,{w:rec.e1rm.tw})+1e-9)best+=' · heaviest '+wtxt(rec.w);
+    txt=(beat?'New PR — old best ':'PR ')+best;when=rec.e1rm.date;
+  }
+  return h('button',{class:'ex-pr'+(beat?' beat':'')+(txt?'':' none'),'aria-label':'Personal record — open history',
+      onclick:()=>exHistorySheet(en.exId)},
+    ic('trophy','sm'),
+    h('span',{class:'ex-pr-t'},txt||'No record yet — today sets it'),
+    when?h('span',{class:'ex-pr-d'},fmtDateShort(when)):null);
+}
+function refreshPrChip(en,row){
+  const card=row&&row.closest('.card'),old=card&&card.querySelector('.ex-pr');
+  if(old)old.replaceWith(prChipEl(en));
+}
 // per-exercise progress chip: "2/3", then a green "Done" once every set is in
 function exProgEl(en){
   const total=en.sets.length,done=en.sets.filter(s2=>s2.done).length;
@@ -3084,6 +3131,7 @@ function exCard(i){
     ),
     exProgEl(en),
     h('button',{class:'icon-btn','aria-label':'Exercise options',style:'width:38px;height:38px;margin:-3px -6px 0 0',onclick:()=>exMenu(i)},ic('more'))));
+  card.append(prChipEl(en));
   if(ex&&ex.pin)card.append(h('div',{class:'pin-note',onclick:()=>pinSheet(ex,i)},ic('pin','sm'),h('span',{},ex.pin)));
   if(en.notes)card.append(h('div',{class:'note-pill'},ic('note','sm'),h('span',{},en.notes)));
   const grid=h('div',{class:'setgrid'},
@@ -3245,6 +3293,7 @@ function toggleDone(i,j,row,in1,in2){
   }
   const chip=row.closest('.card')&&row.closest('.card').querySelector('.ex-prog');
   if(chip)chip.replaceWith(exProgEl(en));
+  refreshPrChip(en,row);
   // a ticked set is written NOW, not after the debounce: an iOS 27 home-screen
   // app can be frozen without any hide event firing first
   updateWoStats();flushActive();
@@ -3381,6 +3430,7 @@ let PR_EDIT_T=null;
 function reverifySet(en,st,row){
   if(!st.done)return;
   const res=recheckPRs(en.exId,st,row);   // silent pass: the gold ring tracks every keystroke
+  refreshPrChip(en,row);
   saveActive();
   // …but an edit that turns a set INTO a record deserves the same celebration
   // as ticking one does. Debounced so typing 1 → 10 → 100 fires once, when you
@@ -5927,7 +5977,7 @@ async function boot(){
     // v5.8 additions: fair strength score, kg ⇄ lb, history, forgotten Finish, updates
     bwShare,STR_REP_CAP,unitConvert,convertUnits,unitSwitchSheet,exHistorySheet,exMenu,
     staleInfo,staleCard,showStale,finishWorkout,STALE_MS,
-    UPD,newerVer,checkForUpdate,updateCard,showUpdate,fmtW};
+    UPD,newerVer,checkForUpdate,updateCard,showUpdate,fmtW,prChipEl};
   switchTab('log');
   applyLaunchIntent();
   // a launch that fell back to the cached copy (no signal) still hears of an update

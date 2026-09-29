@@ -1844,7 +1844,49 @@ window.__iltest=async function(opts){
       ok('offline: …with its MIT licence alongside',(await fetch('vendor/chart.js-LICENSE.md')).ok);
     }
 
-    /* ---------- 36. stress test ---------- */
+    /* ---------- 36. the record to beat, on every exercise card ---------- */
+    {
+      const shut=()=>{document.querySelectorAll('.overlay').forEach(o=>o.remove());il.SHEETS.length=0;};
+      shut();
+      il.S.workouts=[mkWorkout('x06',[[100,5]],now-20*DAY,'P1'),mkWorkout('x06',[[107.5,5]],now-12*DAY,'P2'),
+        mkWorkout('x06',[[110,1]],now-5*DAY,'P3')];
+      const d2=new Date(now-12*DAY).toLocaleDateString(undefined,{day:'numeric',month:'short'});
+      il.S.active={id:uid(),name:'PR live',startedAt:now-600e3,notes:'',exs:[
+        {exId:'x06',notes:'',sets:[{t:'N',w:110,r:5,rpe:9,dur:null,dist:null,done:false},{t:'N',w:100,r:5,rpe:8,dur:null,dist:null,done:false}]},
+        {exId:'x44',notes:'',sets:[{t:'N',w:null,r:null,rpe:null,dur:null,dist:null,done:false}]}]};
+      // as a session start or resume leaves them
+      il.S.prev={};il.S.records={x06:il.computeRecords('x06'),x44:il.computeRecords('x44')};
+      il.switchTab('log');await sleep(80);
+      const chip=()=>document.querySelector('#exc0 .ex-pr');
+      ok('pr card: shows your best set before today, and a heavier single too',
+        !!chip()&&/PR 107\.5 kg × 5/.test(chip().textContent)&&/heaviest 110 kg/.test(chip().textContent)&&chip().textContent.includes(d2),
+        chip()?chip().textContent:'no chip');
+      ok('pr card: an exercise never done says today sets it',/No record yet/.test(document.querySelector('#exc1 .ex-pr').textContent));
+      document.querySelector('#exc0 .setrow .chk').click();await sleep(80);
+      ok('pr card: a set that beats it turns the chip gold, still naming the old best',
+        chip().classList.contains('beat')&&/New PR — old best 107\.5 kg × 5/.test(chip().textContent),chip().textContent);
+      const rs=document.querySelector('#rt-skip');if(rs)rs.click();
+      document.querySelector('#exc0 .setrow .chk').click();await sleep(80);   // untick it
+      ok('pr card: …and goes back when that set is unticked',
+        !chip().classList.contains('beat')&&/^PR 107\.5/.test(chip().querySelector('.ex-pr-t').textContent));
+      chip().click();await sleep(300);
+      ok('pr card: tapping it opens the exercise history',document.querySelectorAll('.overlay .hist-row').length===3);
+      shut();try{history.replaceState({ilSheet:0},'');}catch(e){}
+      // bodyweight and cardio records read naturally
+      il.S.workouts=[mkWorkout('x15',[[0,8]],now-9*DAY,'BW1'),mkWorkout('x15',[[10,5]],now-4*DAY,'BW2'),
+        {id:uid(),name:'Ride',finishedAt:now-3*DAY,dur:3100,notes:'',exs:[{exId:'c03',sets:[{t:'N',w:null,r:null,rpe:6,dur:52,dist:18.2,done:true}]}]}];
+      il.S.active={id:uid(),name:'PR BW',startedAt:now-600e3,notes:'',exs:[
+        {exId:'x15',notes:'',sets:[{t:'N',w:null,r:null,rpe:null,dur:null,dist:null,done:false}]},
+        {exId:'c03',notes:'',sets:[{t:'N',w:null,r:null,rpe:null,dur:null,dist:null,done:false}]}]};
+      il.S.prev={};il.S.records={};il.switchTab('log');await sleep(80);
+      ok('pr card: a weighted pull-up reads "BW + 10 kg × 5"',/PR BW \+ 10 kg × 5/.test(document.querySelector('#exc0 .ex-pr').textContent),
+        document.querySelector('#exc0 .ex-pr').textContent);
+      ok('pr card: cardio shows furthest and longest',/Furthest 18\.2 km · longest 52 min/.test(document.querySelector('#exc1 .ex-pr').textContent),
+        document.querySelector('#exc1 .ex-pr').textContent);
+      il.S.active=null;await il.flushActive();il.S.workouts=[];il.S.records={};
+    }
+
+    /* ---------- 37. stress test ---------- */
     const N=opts.stress===false?0:400;
     if(N){
       const ids=[...il.S.ex.values()].filter(x=>!x.cardio).slice(0,12).map(x=>x.id);
