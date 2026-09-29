@@ -26,13 +26,39 @@ self.addEventListener('notificationclick',e=>{
 
 // Network-first with cache fallback: always fresh while online, and the app
 // (plus the Chart.js CDN file) keeps working offline after the first load.
+//
+// A gym is rarely OFFLINE, though — it is a basement with one bar of signal,
+// where a request can hang for a minute before failing, and a network-first
+// app hung right along with it. So when the network hasn't answered within
+// NET_WAIT and the cache has a copy, the copy is served; the network's reply
+// still refreshes the cache whenever it lands. Also: only good replies are
+// cached (a transient 404/500 used to overwrite the working copy); the
+// index.html fallback is for page loads only (a failed script or image used to
+// be answered with the app's HTML — and the old `caches.match(…)||…` chain
+// could never reach its last resort, a Promise being always truthy); and a
+// page load the server answers with an error gets the cached app instead.
+const NET_WAIT=3000;
 self.addEventListener('fetch',e=>{
-  if(e.request.method!=='GET')return;
-  e.respondWith(
-    fetch(e.request).then(r=>{
+  const req=e.request;
+  if(req.method!=='GET')return;
+  const nav=req.mode==='navigate';
+  const fromCache=()=>caches.match(req).then(m=>m||(nav?caches.match('./index.html'):undefined))
+    .catch(()=>undefined);   // never reject: the page must always get an answer
+  let stored=Promise.resolve();
+  const net=fetch(req).then(r=>{
+    if(r.ok||r.type==='opaque'){   // opaque = the cross-origin CDN script
       const cp=r.clone();
-      caches.open(CACHE).then(c=>c.put(e.request,cp)).catch(()=>{});
-      return r;
-    }).catch(()=>caches.match(e.request).then(m=>m||caches.match('./index.html')||Response.error()))
-  );
+      stored=caches.open(CACHE).then(c=>c.put(req,cp)).catch(()=>{});
+    }
+    return r;
+  });
+  e.waitUntil(net.then(()=>stored,()=>{}));   // a late reply still refreshes the cache
+  e.respondWith(new Promise(resolve=>{
+    let done=false;
+    const answer=r=>{if(!done&&r){done=true;clearTimeout(slow);resolve(r);}};
+    const slow=setTimeout(()=>fromCache().then(answer),NET_WAIT);
+    net.then(
+      r=>nav&&!r.ok&&r.type!=='opaqueredirect'?fromCache().then(m=>answer(m||r)):answer(r),
+      ()=>fromCache().then(m=>answer(m||Response.error())));
+  }));
 });

@@ -6,7 +6,9 @@
    Covers: mechanics physics, unilateral doubling, strength-score eligibility
    and invariance, schedule date maths (incl. DST), PR-on-edit celebration,
    fatigue ramp, export/import round trip, v4/v5.0 backward compatibility,
-   PWA assets, and a render stress test. */
+   PWA assets, all-or-nothing restore, PREV set matching, live PR flags,
+   double-tap guards, local dates, autosave-on-hide, the service worker's
+   fetch strategy, and a render stress test. */
 (function(){
 const R=[];let only=null;
 const ok=(name,cond,detail)=>{R.push({name,pass:!!cond,detail:cond?(detail||''):('FAILED '+(detail||''))});return !!cond;};
@@ -322,10 +324,17 @@ window.__iltest=async function(opts){
     await il.schedTick();
     ok('reminder: fires on a training day once the time has passed',
       il.S.set.sched.lastNotif===il.dateKey(Date.now()));
+    // "an hour from now" wraps past midnight after 23:00 — 00:30 reads as
+    // already overdue, which made this fail every night in the last hour of
+    // the day. Clamp to 23:59, and in that final minute there is no later time
+    // left today to test with.
+    const eod=new Date();eod.setHours(23,59,0,0);
     il.S.set.sched=mkSched({lastNotif:''});
-    il.S.set.sched.at=hhmm(future);
+    il.S.set.sched.at=hhmm(new Date(Math.min(future.getTime(),eod.getTime())));
     await il.schedTick();
-    ok('reminder: silent before the reminder time',il.S.set.sched.lastNotif==='');
+    ok('reminder: silent before the reminder time',
+      Date.now()>=eod.getTime()||il.S.set.sched.lastNotif==='',
+      Date.now()>=eod.getTime()?'skipped: no later reminder time left today':'');
     il.S.set.sched=mkSched({anchor:midnightOf(Date.now()-864e5)});   // today = slot 1 = Rest
     await il.schedTick();
     ok('reminder: silent on a rest day',il.S.set.sched.lastNotif==='');
@@ -708,7 +717,8 @@ window.__iltest=async function(opts){
         {t:'W',w:40,r:10,rpe:6,dur:null,dist:null},
         {t:'N',w:80,r:8,rpe:8,dur:null,dist:null},
         {t:'N',w:85,r:6,rpe:9,dur:null,dist:null}]};
-      const en={exId:pex.id,sets:[]};
+      // the rows as addExerciseToActive builds them: last session's shape
+      const en={exId:pex.id,sets:[{t:'W'},{t:'N'},{t:'N'}]};
       const g1=il.ghost(en,1), g4=il.ghost(en,4);
       ok('prev: a matching set index still shows that exact set',
         g1&&g1.w===80&&g1.r===8&&g1.src==='prev',JSON.stringify(g1));
@@ -853,7 +863,324 @@ window.__iltest=async function(opts){
         rt.workouts.some(w=>w.name==='Legacy Upper A')&&rt.settings.heightCm===181);
     }
 
-    /* ---------- 18. stress test ---------- */
+    /* ---------- 18. restore is all-or-nothing ----------
+       A restore used to wipe each store and then write records one
+       transaction at a time, so a single record the database refused left the
+       device half-wiped (3 workouts became 1, the library 69 exercises became
+       1). It is now one transaction: all of it lands, or none of it does. */
+    {
+      const counts=async()=>{const o={};
+        for(const s of['exercises','workouts','templates','body'])o[s]=(await il.allOf(s)).length;return o;};
+      const base={app:'ironlog',version:1,exportedAt:new Date().toISOString(),
+        settings:{unit:'kg',name:'Restore Test'},
+        exercises:[{id:'x06',name:'Bench Press',m:'Chest',s:['Triceps'],e:'Barbell'}],
+        workouts:[mkWorkout('x06',[[100,5]],now-2*DAY,'Kept A'),mkWorkout('x06',[[102.5,5]],now-DAY,'Kept B')],
+        templates:[{id:'t_keep',name:'Kept template',pos:0,exs:[{exId:'x06',sets:3,reps:5}]}],
+        body:[{id:'b_keep',date:now,key:'Weight',value:82}],photos:[],deadSeeds:[]};
+      await il.applyImport(JSON.parse(JSON.stringify(base)));
+      const before=await counts();
+      // a record the database cannot store: structured clone refuses functions
+      const poison={...mkWorkout('x06',[[90,5]],now,'Poison'),junk:()=>0};
+      ok('restore: NEGATIVE CONTROL — the poisoned record really is unstorable',(()=>{
+        try{structuredClone(poison);return false;}catch(e){return e.name==='DataCloneError';}
+      })());
+      const bad={...JSON.parse(JSON.stringify(base)),settings:{unit:'lb',name:'Should not stick'},
+        workouts:[mkWorkout('x06',[[60,5]],now,'From backup'),poison]};
+      let err=null;
+      try{await il.applyImport(bad);}catch(e){err=e;}
+      ok('restore: a backup the database refuses is rejected as a whole',
+        !!err&&/nothing was changed/.test(err.message),err?err.message:'no error thrown');
+      const after=await counts();
+      ok('restore: …leaving every store exactly as it was before the attempt',
+        JSON.stringify(after)===JSON.stringify(before),JSON.stringify(before)+' → '+JSON.stringify(after));
+      ok('restore: …and the data on screen untouched',
+        il.S.workouts.some(w=>w.name==='Kept A')&&!il.S.workouts.some(w=>w.name==='From backup')
+        &&il.S.set.name==='Restore Test');
+      ok('restore: settings inside the refused backup were not applied',
+        ((await il.kvGet('settings'))||{}).unit==='kg');
+      // a record that could never be stored is skipped and counted, not fatal
+      const partial=JSON.parse(JSON.stringify(base));
+      partial.workouts.push({...mkWorkout('x06',[[70,5]],now,'Bad key'),id:true});
+      const res=await il.applyImport(partial);
+      ok('restore: an unstorable record is skipped and reported, the rest restored',
+        res&&res.skipped===1&&il.S.workouts.length===2,
+        'skipped='+(res&&res.skipped)+' workouts='+il.S.workouts.length);
+    }
+
+    /* ---------- 19. PREV matches set kind, not array index ----------
+       Rows used to read last session's set at the same array index, so any
+       difference in warm-ups misaligned every row — and ticking an untouched
+       row auto-fills from PREV, so the wrong numbers were LOGGED. */
+    {
+      const pex={id:'t_prev2',name:'T Prev2',m:'Chest',s:[],e:'Barbell'};
+      il.S.ex.set(pex.id,pex);
+      const W=(w,r)=>({t:'W',w,r,rpe:null,dur:null,dist:null}),N=(w,r)=>({t:'N',w,r,rpe:8,dur:null,dist:null});
+      // last session had two warm-ups; a template start builds working rows only
+      il.S.prev[pex.id]={sets:[W(40,10),W(60,5),N(100,5),N(100,5),N(102.5,4)]};
+      const tplRows={exId:pex.id,sets:[{t:'N'},{t:'N'},{t:'N'}]};
+      const g=[0,1,2].map(j=>il.ghost(tplRows,j));
+      ok('prev: after a warm-up session, working set 1 reads working set 1',
+        g[0]&&g[0].t==='N'&&g[0].w===100&&g[0].r===5&&g[0].src==='prev',JSON.stringify(g[0]));
+      ok('prev: every working row lines up with its working counterpart',
+        g[1].w===100&&g[2].w===102.5&&g[2].r===4,g.map(x=>x&&x.w+'×'+x.r).join(', '));
+      ok('prev: NEGATIVE CONTROL — raw index 0 of that session is a warm-up',
+        il.S.prev[pex.id].sets[0].t==='W','which index matching offered (and auto-filled) for set 1');
+      // the warm-up calculator inserts rows above a session that had none
+      il.S.prev[pex.id]={sets:[N(100,5),N(100,5),N(102.5,4)]};
+      const calcRows={exId:pex.id,sets:[{t:'W'},{t:'W'},{t:'W'},{t:'N'},{t:'N'},{t:'N'}]};
+      const gc=calcRows.sets.map((_,j)=>il.ghost(calcRows,j));
+      ok('prev: added warm-ups do not shift the working sets',
+        gc[3].w===100&&gc[4].w===100&&gc[5].w===102.5&&gc.slice(3).every(x=>x.src==='prev'),
+        gc.slice(3).map(x=>x&&x.w+'×'+x.r).join(', '));
+      ok('prev: a warm-up never borrows a working set’s numbers',gc.slice(0,3).every(x=>x===null));
+      il.S.prev[pex.id]={sets:[W(40,10),W(60,5),N(100,5)]};
+      const wRows={exId:pex.id,sets:[{t:'W'},{t:'W'},{t:'W'},{t:'N'}]};
+      ok('prev: warm-up 2 reads warm-up 2, and an extra warm-up has no stand-in',
+        il.ghost(wRows,1).w===60&&il.ghost(wRows,2)===null&&il.ghost(wRows,3).w===100);
+      il.S.prev[pex.id]=null;
+      const tgtRows={exId:pex.id,sets:[{t:'W'},{t:'N'}],tgt:{w:80,r:8,rpe:null}};
+      ok('prev: a template target fills working rows only',
+        il.ghost(tgtRows,0)===null&&il.ghost(tgtRows,1).src==='tgt'&&il.ghost(tgtRows,1).w===80);
+      il.S.prev[pex.id]={sets:[W(40,10),W(60,5),N(100,5)]};il.S.records[pex.id]=null;
+      ok('prev: the warm-up calculator ramps towards a WORKING weight',
+        il.bestWeightGuess({exId:pex.id,sets:[{t:'W'},{t:'W'},{t:'N'}]})===100,
+        'guessed '+il.bestWeightGuess({exId:pex.id,sets:[{t:'W'},{t:'W'},{t:'N'}]})+' (row 0 is a 40 kg warm-up)');
+      il.S.ex.delete(pex.id);delete il.S.prev[pex.id];delete il.S.records[pex.id];
+      // end to end, through the real UI: start the template, tick set 1 untouched
+      il.S.workouts=[{id:uid(),name:'Push',notes:'',startedAt:now-3*DAY-3600e3,finishedAt:now-3*DAY,dur:3600,
+        exs:[{exId:'x06',notes:'',sets:[W(40,10),W(60,5),N(100,5),N(100,5),N(100,5)]}]}];
+      il.S.templates=[{id:'t_e2e',name:'E2E Push',pos:0,exs:[{exId:'x06',sets:3,reps:5,w:100,rpe:null}]}];
+      il.S.active=null;
+      il.switchTab('templates');await sleep(60);
+      [...document.querySelectorAll('#page-templates .card')].find(c=>/E2E Push/.test(c.textContent))
+        .querySelector('.btn.primary').click();
+      await sleep(250);
+      document.querySelector('#exc0 .setrow .chk').click();await sleep(60);
+      const s0=il.S.active.exs[0].sets[0];
+      ok('prev: ticking an untouched set logs last session’s WORKING numbers',
+        s0.done&&s0.w===100&&s0.r===5,'logged '+s0.w+'×'+s0.r+' (index matching logged the 40×10 warm-up)');
+      il.S.active=null;il.S.templates=[];
+      document.querySelector('#rt-skip').click();
+    }
+
+    /* ---------- 20. live PR flags follow the whole session ----------
+       Re-checking a set used to rebuild records from finished history ONLY,
+       forgetting a heavier set logged minutes earlier in the same session. */
+    {
+      document.querySelectorAll('#toasts .toast').forEach(t=>t.remove());
+      const px={id:'t_pr2',name:'T PR Two',m:'Back',s:[],e:'Barbell'};
+      il.S.ex.set(px.id,px);
+      il.S.workouts=[mkWorkout(px.id,[[100,5]],now-3*DAY)];              // all-time best: 100×5
+      const done=(w,r)=>({t:'N',w,r,rpe:8,dur:null,dist:null,done:true});
+      il.S.active={id:uid(),name:'PR flow',startedAt:now,notes:'',exs:[{exId:px.id,notes:'',sets:[done(105,5),done(103,5)]}]};
+      il.S.prev={};il.S.records={};
+      il.switchTab('log');await sleep(60);
+      const e0=il.S.active.exs[0],[a,b]=e0.sets;
+      const [rowA,rowB]=document.querySelectorAll('#exc0 .setrow');
+      il.recheckPRs(px.id);
+      ok('PR: the heavier set is the record, the lighter one after it is not',a.pr===1&&!b.pr);
+      il.reverifySet(e0,b,rowB);           // e.g. fixing a typo in its reps
+      await sleep(1100);
+      ok('PR: retyping a lighter set after a heavier one stays quiet',
+        !b.pr&&!rowB.classList.contains('prset')&&!document.querySelector('#toasts .toast.pr'),
+        [...document.querySelectorAll('#toasts .toast.pr')].map(t=>t.textContent).join(' | '));
+      ok('PR: NEGATIVE CONTROL — against finished history alone, 103 beats 100',
+        103>il.computeRecords(px.id).w.v,'which is how that edit used to fire “weight PR 103 kg”');
+      rowA.querySelector('.chk').click();await sleep(60);                 // untick the record
+      ok('PR: an unticked record loses its gold ring',!a.pr&&!rowA.classList.contains('prset'));
+      ok('PR: …and the set it was overshadowing becomes the record',b.pr===1&&rowB.classList.contains('prset'));
+      a.w=95;rowA.querySelector('.chk').click();await sleep(60);         // re-tick it below your best
+      ok('PR: a set re-ticked below your best is not saved as a PR',a.done&&!a.pr,'pr='+a.pr);
+      rowB.querySelector('.set-type').click();await sleep(350);           // delete the 103
+      [...document.querySelectorAll('.overlay .btn.danger')].find(x=>/Delete set/.test(x.textContent)).click();
+      await sleep(300);
+      ok('PR: deleting a set forgets its numbers',il.S.records[px.id].w.v===100&&!a.pr,
+        'best now '+il.S.records[px.id].w.v);
+      e0.sets.push(done(101,5));il.recheckPRs(px.id);
+      ok('PR: …so it no longer blocks the next genuine record',e0.sets[1].pr===1);
+      il.S.active=null;il.S.ex.delete(px.id);
+      document.querySelector('#rt-skip').click();
+      document.querySelectorAll('.overlay').forEach(o=>o.remove());il.SHEETS.length=0;
+      try{history.replaceState({ilSheet:0},'');}catch(e){}
+      document.querySelectorAll('#toasts .toast').forEach(t=>t.remove());
+    }
+
+    /* ---------- 21. a double tap does one thing ---------- */
+    {
+      il.S.workouts=[];il.S.templates=[];
+      il.S.active={id:uid(),name:'Double tap',startedAt:now-1800e3,notes:'',
+        exs:[{exId:'x06',notes:'',sets:[{t:'N',w:80,r:8,rpe:8,dur:null,dist:null,done:true}]}]};
+      il.S.prev={};il.S.records={};
+      il.switchTab('log');await sleep(60);
+      document.querySelector('#page-log .btn.green').click();await sleep(350);          // Finish
+      const saveBtn=[...document.querySelectorAll('.overlay .btn.green')].find(x=>/Save Workout/.test(x.textContent));
+      saveBtn.click();saveBtn.click();
+      await sleep(700);
+      ok('double tap: Save Workout saves the session once',
+        il.S.workouts.length===1&&(await il.allOf('workouts')).filter(w=>w.name==='Double tap').length===1,
+        il.S.workouts.length+' in memory');
+      const offers=[...document.querySelectorAll('.overlay h2')].filter(x=>/Save as template/.test(x.textContent));
+      ok('double tap: …and offers to make a template once',offers.length===1,offers.length+' prompts');
+      const tplBtn=[...document.querySelectorAll('.overlay .btn.primary')].find(x=>/Save as Template/.test(x.textContent));
+      tplBtn.click();tplBtn.click();await sleep(450);
+      ok('double tap: Save as Template creates one template',il.S.templates.length===1,il.S.templates.length+' templates');
+      // a real finger is hit-tested, so replay the second tap at the same spot
+      // while the menu sheet is fading out
+      il.switchTab('templates');await sleep(60);
+      document.querySelector('#page-templates .card .icon-btn').click();await sleep(450);
+      const dup=[...document.querySelectorAll('.overlay .btn')].find(x=>/Duplicate/.test(x.textContent));
+      const rc=dup.getBoundingClientRect(),cx=rc.left+rc.width/2,cy=rc.top+rc.height/2;
+      const tap=()=>{const el=document.elementFromPoint(cx,cy);if(el)el.click();return el;};
+      tap();const second=tap();
+      await sleep(450);
+      ok('double tap: a closing sheet swallows the second tap (one duplicate, not two)',
+        il.S.templates.length===2,il.S.templates.length+' templates; 2nd tap hit '+(second?second.className||second.tagName:'nothing'));
+      il.S.templates=[];il.S.workouts=[];
+      document.querySelectorAll('.overlay').forEach(o=>o.remove());il.SHEETS.length=0;
+      try{history.replaceState({ilSheet:0},'');}catch(e){}
+    }
+
+    /* ---------- 22. "today" means your today ----------
+       Picks a moment when the UTC date and the local date differ, if this
+       time zone has one: 00:30 local east of Greenwich, 23:30 local west. */
+    {
+      const off=-new Date(2026,5,15,12).getTimezoneOffset();   // minutes east of UTC
+      const probe=new Date(2026,5,15,off>0?0:off<0?23:12,30).getTime();
+      const realNow=Date.now;
+      Date.now=()=>probe;
+      try{
+        document.querySelectorAll('.overlay').forEach(o=>o.remove());
+        il.switchTab('body');await sleep(60);
+        [...document.querySelectorAll('#page-body .btn.primary')].find(x=>/Log/.test(x.textContent)).click();
+        await sleep(300);
+        const dateIn=document.querySelector('.overlay input[type=date]');
+        ok('dates: the bodyweight form defaults to today in your time zone',dateIn.value==='2026-06-15',
+          'offered '+dateIn.value+(off?'':' (this runner is on UTC: nothing to tell apart)'));
+        ok('dates: NEGATIVE CONTROL — at that moment the UTC date is a different day',
+          off===0||new Date(probe).toISOString().slice(0,10)!=='2026-06-15',
+          'UTC says '+new Date(probe).toISOString().slice(0,10)+', which the form used to offer');
+        ok('dates: backup files are named for your day too',
+          il.backupFileName()==='ironlog-backup-2026-06-15.json',il.backupFileName());
+        const n0=il.S.body.length;
+        document.querySelector('.overlay input.num').value='80.4';
+        const saveB=[...document.querySelectorAll('.overlay .btn.primary')].find(x=>/Save/.test(x.textContent));
+        saveB.click();saveB.click();
+        await sleep(300);
+        ok('double tap: logging bodyweight records one entry',il.S.body.length===n0+1,(il.S.body.length-n0)+' entries');
+        const last=il.S.body[il.S.body.length-1];
+        ok('dates: …on the local day it was logged',!!last&&il.dateKey(last.date)==='2026-06-15');
+      }finally{Date.now=realNow;}
+      document.querySelectorAll('.overlay').forEach(o=>o.remove());il.SHEETS.length=0;
+      try{history.replaceState({ilSheet:0},'');}catch(e){}
+    }
+
+    /* ---------- 23. hiding the app lands the pending autosave ----------
+       A phone that is locked or switched away freezes timers and may reclaim
+       the page, so a debounced write still pending then was simply lost. */
+    {
+      il.S.active={id:uid(),name:'Flush test',startedAt:now,notes:'',
+        exs:[{exId:'x06',notes:'',sets:[{t:'N',w:null,r:null,rpe:null,dur:null,dist:null,done:false}]}]};
+      await il.flushActive();                                   // storage matches the screen
+      const st=il.S.active.exs[0].sets[0];
+      st.w=100;st.r=5;st.done=true;
+      il.saveActive();                                          // what ticking a set does
+      const landed=async()=>{const a=await il.kvGet('active');const s=a&&a.exs[0].sets[0];return !!(s&&s.done&&s.w===100);};
+      ok('autosave: NEGATIVE CONTROL — right after a tick the write is still pending',!(await landed()),
+        'the window a phone lock could freeze');
+      Object.defineProperty(document,'visibilityState',{configurable:true,get:()=>'hidden'});
+      try{document.dispatchEvent(new Event('visibilitychange'));}
+      finally{delete document.visibilityState;}
+      ok('autosave: hiding the app writes it immediately',await landed());
+      il.S.active=null;await il.flushActive();
+    }
+
+    /* ---------- 24. service worker: slow networks and bad replies ----------
+       sw.js runs here against stand-in caches, fetch and timers, so its fetch
+       strategy is tested without touching the real network. */
+    {
+      const src=await (await fetch('sw.js',{cache:'no-store'})).text();
+      const mkSW=code=>{
+        const H={},store=new Map(),timers=[];let net=()=>new Promise(()=>{});
+        const key=r=>typeof r==='string'?new URL(r,location.href).href:r.url;
+        const cachesMock={open:async()=>({put:async(r,res)=>{store.set(key(r),res);},addAll:async()=>{}}),
+          match:async r=>{const m=store.get(key(r));return m&&m.clone?m.clone():m;},keys:async()=>[],delete:async()=>true};
+        const selfMock={addEventListener:(t,f)=>{H[t]=f;},skipWaiting:()=>{},
+          clients:{claim:async()=>{},matchAll:async()=>[],openWindow:async()=>{}}};
+        new Function('self','caches','fetch','setTimeout','clearTimeout',code)(selfMock,cachesMock,r=>net(r),
+          (fn,ms)=>timers.push({fn,ms,live:true})-1,id=>{if(timers[id])timers[id].live=false;});
+        return {timers,setNet:f=>{net=f;},
+          put:(u,body)=>store.set(key(u),new Response(body,{status:200})),
+          get:u=>store.get(key(u)),
+          go(u,mode){
+            let resp=null;const waits=[];
+            H.fetch({request:{url:key(u),method:'GET',mode:mode||'no-cors'},respondWith:p=>{resp=p;},waitUntil:p=>{waits.push(p);}});
+            return {resp,settled:Promise.all(waits)};
+          },
+          tick(){for(const t of timers)if(t.live){t.live=false;t.fn();}}};
+      };
+      const pending=async p=>{let s=false;p.then(()=>{s=true;},()=>{s=true;});await sleep(30);return !s;};
+      // every await is bounded: a handler that never answers must FAIL here,
+      // not hang the whole suite (which is exactly what the old one did)
+      const within=p=>Promise.race([p,sleep(400).then(()=>null)]);
+      const text=async r=>r&&r.text?await r.text():null;
+      // the v5.7 handler, verbatim, for the negative controls
+      const OLD="self.addEventListener('fetch',e=>{if(e.request.method!=='GET')return;e.respondWith("
+        +"fetch(e.request).then(r=>{const cp=r.clone();caches.open('c').then(c=>c.put(e.request,cp)).catch(()=>{});return r;})"
+        +".catch(()=>caches.match(e.request).then(m=>m||caches.match('./index.html')||Response.error())));});";
+
+      // one bar of signal: the network hangs
+      let sw=mkSW(src);
+      sw.put('./','app v1');sw.put('./index.html','app v1');
+      let release;sw.setNet(()=>new Promise(r=>{release=r;}));
+      let f=sw.go('./','navigate');
+      ok('sw: a slow network still gets its chance first',await pending(f.resp));
+      ok('sw: …but only for a few seconds',sw.timers.length===1&&sw.timers[0].ms>0&&sw.timers[0].ms<=5000,
+        (sw.timers[0]||{}).ms+' ms');
+      sw.tick();
+      ok('sw: then the cached app is served instead of hanging',(await text(await within(f.resp)))==='app v1');
+      if(release)release(new Response('app v2',{status:200}));await within(f.settled);
+      ok('sw: …and the late reply still refreshes the cache for next time',(await text(sw.get('./')))==='app v2');
+      let old=mkSW(OLD);old.put('./','app v1');
+      const of=old.go('./','navigate');old.tick();
+      ok('sw: NEGATIVE CONTROL — the old handler hung for as long as the network did',await pending(of.resp));
+
+      // a working network always wins, and is cached
+      sw=mkSW(src);sw.put('./','app v1');
+      sw.setNet(async()=>new Response('app v3',{status:200}));
+      f=sw.go('./','navigate');
+      ok('sw: a live network is preferred over the cache',(await text(await within(f.resp)))==='app v3');
+      await within(f.settled);
+      ok('sw: …and its reply cached',(await text(sw.get('./')))==='app v3');
+
+      // error replies never overwrite a working copy
+      sw=mkSW(src);sw.put('./icon-192.png','good icon');sw.put('./','app v1');
+      sw.setNet(async()=>new Response('oops',{status:500}));
+      f=sw.go('./icon-192.png');await within(f.resp);await within(f.settled);
+      ok('sw: a 500 is not cached over a good copy',(await text(sw.get('./icon-192.png')))==='good icon');
+      f=sw.go('./','navigate');
+      ok('sw: a page load the server fails gets the cached app',(await text(await within(f.resp)))==='app v1');
+
+      // offline
+      sw=mkSW(src);sw.put('./index.html','<html>app</html>');
+      sw.setNet(async()=>{throw new TypeError('offline');});
+      const r4=await within(sw.go('./missing.js').resp);
+      ok('sw: offline, an uncached script gets a network error — not the app’s HTML',r4&&r4.type==='error',r4?r4.type:'none');
+      old=mkSW(OLD);old.put('./index.html','<html>app</html>');old.setNet(async()=>{throw new TypeError('offline');});
+      ok('sw: NEGATIVE CONTROL — the old handler answered it with index.html',
+        (await text(await within(old.go('./missing.js').resp)))==='<html>app</html>');
+      ok('sw: offline, a page load still gets the cached app',
+        (await text(await within(sw.go('./','navigate').resp)))==='<html>app</html>');
+
+      // the Chart.js CDN reply is opaque (cross-origin, no CORS) but still cacheable
+      sw=mkSW(src);
+      const opaque={ok:false,status:0,type:'opaque',clone(){return this;}};
+      const cdn='https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js';
+      sw.setNet(async()=>opaque);
+      f=sw.go(cdn);await within(f.resp);await within(f.settled);
+      ok('sw: the opaque CDN script is still cached for offline use',sw.get(cdn)===opaque);
+    }
+
+    /* ---------- 25. stress test ---------- */
     const N=opts.stress===false?0:400;
     if(N){
       const ids=[...il.S.ex.values()].filter(x=>!x.cardio).slice(0,12).map(x=>x.id);

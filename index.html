@@ -1038,6 +1038,12 @@ function sheet(title,content,opts={}){
   function close(fromPop){
     if(closed)return;closed=true;
     const i=SHEETS.indexOf(entry);if(i>=0)SHEETS.splice(i,1);
+    // the sheet stays on screen for its 210 ms fade, and a bouncy double tap
+    // used to land on the same button again — duplicating a template, moving
+    // an exercise two places. Inert content lets the backdrop swallow the
+    // stray tap instead (its handler is a no-op once closed), and nothing
+    // falls through to the page underneath.
+    sh.style.pointerEvents='none';
     ov.classList.remove('open');
     setTimeout(()=>ov.remove(),210);
     if(opts.onClose)opts.onClose();
@@ -1341,7 +1347,7 @@ async function buildExportData(){
 /* A backup file is the only copy of this data that survives the browser
    deciding to clear the origin, so the date of the last one is tracked and
    surfaced (Settings → Data safety, plus a nag on the Log tab). */
-const backupFileName=()=>'ironlog-backup-'+new Date().toISOString().slice(0,10)+'.json';
+const backupFileName=()=>'ironlog-backup-'+dateKey(Date.now())+'.json';   // your date, not UTC's
 async function noteBackup(){
   BK.last=Date.now();
   try{await kvPut('lastBackupAt',BK.last);}catch(e){}
@@ -1387,38 +1393,77 @@ async function importJSON(file){
   if(!data||data.app!=='ironlog'||!Array.isArray(data.exercises||[])||!Array.isArray(data.workouts||[])){
     toast('Not an IronLog backup file');return;
   }
+  const when=Date.parse(data.exportedAt);
   const ok=await ask('Import backup?',
-    'This replaces ALL current data with the backup from '+(data.exportedAt||'?').slice(0,10)+' ('+(data.workouts||[]).length+' workouts, '+(data.exercises||[]).length+' exercises, '+(data.photos||[]).length+' photos).','Replace everything',true);
+    'This replaces ALL current data with the backup from '+(isNaN(when)?'?':dateKey(when))+' ('+(data.workouts||[]).length+' workouts, '+(data.exercises||[]).length+' exercises, '+(data.photos||[]).length+' photos).','Replace everything',true);
   if(!ok)return;
   try{
-    await applyImport(data);
-    toast('Backup imported — '+S.workouts.length+' workouts restored');
-  }catch(err){toast('Import failed: '+err.message);}
+    const res=await applyImport(data);
+    toast('Backup imported — '+S.workouts.length+' workouts restored'
+      +(res.skipped?' ('+res.skipped+' unreadable record'+(res.skipped>1?'s':'')+' skipped)':''),{dur:res.skipped?5000:2600});
+  }catch(err){toast('Import failed: '+err.message,{dur:6000});}
 }
-// separated from the confirm dialog so it is testable and reusable;
-// tolerant of records written by older/newer versions (missing fields get defaults)
+/* Restoring is the moment the user's data is most at stake, so it is
+   all-or-nothing: every clear and every write happens inside ONE IndexedDB
+   transaction, which either commits whole or rolls back to exactly what was
+   there before. It used to clear each store and then write records in
+   separate transactions, so one record the database refused — or the app
+   being killed mid-restore — left the device half-wiped: the backup only
+   partly in, the original data already gone. Photos are decoded BEFORE the
+   transaction opens, because awaiting anything else inside it would let
+   IndexedDB auto-commit halfway. A record that could never be stored is
+   skipped and counted rather than sinking the whole restore.
+   Separated from the confirm dialog so it is testable and reusable; tolerant
+   of records written by older/newer versions (missing fields get defaults). */
+const validKey=k=>{try{indexedDB.cmp(k,k);return true;}catch(e){return false;}};
 async function applyImport(data){
-  for(const s of['exercises','workouts','templates','body','photos'])await dbClear(s);
-  await kvDel('active');
-  await kvPut('deadSeeds',data.deadSeeds||[]);
-  // let the per-side seed patch re-run against the imported library, otherwise
-  // restoring a pre-5.3 backup onto an already-patched device leaves its
-  // dumbbell lifts untagged. Exercises the user edited stay untouched either way.
-  await kvDel('uniPatched');
-  for(const e of data.exercises||[])if(e&&e.id&&e.name)await dbPut('exercises',{m:'Other',s:[],e:'Other',...e});
-  for(const w of data.workouts||[])if(w&&w.id&&Array.isArray(w.exs))await dbPut('workouts',{name:'Workout',notes:'',dur:0,...w});
-  for(const t of data.templates||[])if(t&&t.id&&Array.isArray(t.exs))await dbPut('templates',{name:'Template',pos:0,...t});
-  for(const b of data.body||[])if(b&&b.id&&b.key&&typeof b.value==='number')await dbPut('body',b);
+  const rows={exercises:[],workouts:[],templates:[],body:[],photos:[]};
+  let skipped=0;
+  const keep=(store,ok,rec)=>{if(ok&&validKey(rec.id))rows[store].push(rec);else skipped++;};
+  for(const e of data.exercises||[])keep('exercises',e&&e.id&&e.name,{m:'Other',s:[],e:'Other',...e});
+  for(const w of data.workouts||[])keep('workouts',w&&w.id&&Array.isArray(w.exs),{name:'Workout',notes:'',dur:0,...w});
+  for(const t of data.templates||[])keep('templates',t&&t.id&&Array.isArray(t.exs),{name:'Template',pos:0,...t});
+  for(const b of data.body||[])keep('body',b&&b.id&&b.key&&typeof b.value==='number',{...b});
   for(const p of data.photos||[]){
-    if(!p||!p.id||!p.dataUrl)continue;
-    try{const blob=await(await fetch(p.dataUrl)).blob();await dbPut('photos',{id:p.id,date:p.date||Date.now(),blob});}catch(e){}
+    if(!p||!p.id||!p.dataUrl||!validKey(p.id)){skipped++;continue;}
+    try{rows.photos.push({id:p.id,date:p.date||Date.now(),blob:await(await fetch(p.dataUrl)).blob()});}
+    catch(e){skipped++;}
   }
-  if(data.settings)S.set={...DEF,...data.settings};
-  await saveSettings();
+  const settings=data.settings?{...DEF,...data.settings}:S.set;
+  await new Promise((res,rej)=>{
+    const tx=db.transaction([...Object.keys(rows),'kv'],'readwrite');
+    const fail=err=>rej(new Error('nothing was changed ('+((err&&err.message)||'the restore was interrupted')+')'));
+    tx.oncomplete=()=>res();
+    tx.onabort=()=>fail(tx.error);
+    try{
+      for(const s of Object.keys(rows)){
+        const os=tx.objectStore(s);
+        os.clear();
+        for(const r of rows[s])os.put(r);
+      }
+      const kv=tx.objectStore('kv');
+      kv.delete('active');
+      kv.put(data.deadSeeds||[],'deadSeeds');
+      // let the per-side seed patch re-run against the imported library, otherwise
+      // restoring a pre-5.3 backup onto an already-patched device leaves its
+      // dumbbell lifts untagged. Exercises the user edited stay untouched either way.
+      kv.delete('uniPatched');
+      kv.put(settings,'settings');
+    }catch(err){
+      // a synchronous throw leaves the transaction live with half its writes
+      // queued — abort, or it would auto-commit exactly the partial state
+      try{tx.abort();}catch(e){}
+      fail(err);
+    }
+  });
+  // the stored in-progress workout is gone — drop it from memory before any
+  // await, so a pending autosave can't write it back
+  S.active=null;S.prev={};S.records={};
+  S.set=settings;
   await loadAll();
   await seedBackfill();   // old backups gain new seeds (e.g. v5 cardio) immediately
-  S.active=null;S.prev={};S.records={};
   renderTab();
+  return {skipped};
 }
 async function eraseAll(){
   const ok=await ask('Erase all data?','Every workout, template, measurement and photo will be permanently deleted from this device.','Erase everything',true);
@@ -1436,7 +1481,15 @@ const newSet=()=>({t:'N',w:null,r:null,rpe:null,dur:null,dist:null,done:false});
 let saveT=null;
 function saveActive(){   // autosave the in-progress workout (debounced)
   clearTimeout(saveT);
-  saveT=setTimeout(()=>{S.active?kvPut('active',S.active):kvDel('active');},250);
+  saveT=setTimeout(flushActive,250);
+}
+// write the in-progress workout NOW. Also run whenever the app is hidden (see
+// boot): a locked or switched-away phone freezes the page's timers and may
+// reclaim it without warning, and "tick the set, lock the phone" is the most
+// common motion in a gym — that set must not still be waiting on the debounce.
+function flushActive(){
+  clearTimeout(saveT);saveT=null;
+  return S.active?kvPut('active',S.active):kvDel('active');
 }
 function updateNavDot(){
   const b=$('nav button[data-tab="log"]');
@@ -1579,14 +1632,17 @@ function newExerciseSheet(onSaved){
   const chips=h('div',{class:'chips',style:'flex-wrap:wrap'},MUSCLES.map(x=>{
     const ch=h('button',{class:'chip',onclick:()=>{sec.has(x)?sec.delete(x):sec.add(x);ch.classList.toggle('on');}},x);
     return ch;}));
+  let busy=false;   // one tap, one exercise — even a double one
   const close=sheet('New exercise',h('div',{},
     h('span',{class:'lbl'},'Name'),name,
     h('span',{class:'lbl'},'Primary muscle'),mSel,
     h('span',{class:'lbl'},'Secondary muscles'),chips,
     h('span',{class:'lbl'},'Equipment'),eqSel,
     h('button',{class:'btn primary mt12',onclick:async()=>{
+      if(busy)return;
       const nm=name.value.trim();
       if(!nm){toast('Give it a name');return;}
+      busy=true;
       const ex={id:uid(),name:nm,m,s:[...sec],e:eq,custom:true};
       if(eq==='Cardio')ex.cardio=1;
       S.ex.set(ex.id,ex);await dbPut('exercises',ex);
@@ -2032,7 +2088,7 @@ async function remapExercise(oldId,newId){
   if(S.active&&S.active.exs.some(en=>en.exId===oldId)){
     S.active.exs=remapEntries(S.active.exs);
     S.prev[newId]=prevSetsFor(newId);
-    S.records[newId]=computeRecords(newId);
+    recheckPRs(newId);
     saveActive();
   }
 }
@@ -2199,25 +2255,35 @@ function replaceCard(i){
   const old=$('#exc'+i);
   if(old)old.replaceWith(exCard(i));else renderLog();
 }
-// PREV reference for a row: same-index set from the previous session of this
+// PREV reference for a row: the matching set from the previous session of this
 // exercise, falling back to the template target. This is the priority feature.
+// Rows are matched by KIND and position within that kind — working set 2 reads
+// last session's working set 2, warm-up 1 reads last session's warm-up 1 —
+// never by raw array index. Index matching broke whenever the two sessions'
+// warm-ups differed: start from a template (which builds working rows only)
+// after a session that had warm-ups and working set 1 showed last week's first
+// warm-up, so ticking it untouched logged the warm-up's numbers as a working
+// set; the warm-up calculator, which inserts rows at the top, shifted every
+// row the other way. A missing row counts as a working set.
 function ghost(en,j){
   const p=S.prev[en.exId];
-  if(p&&p.sets[j]){
-    const ps=p.sets[j];
-    return{t:ps.t,w:ps.w,r:ps.r,rpe:ps.rpe,dur:ps.dur!=null?ps.dur:null,dist:ps.dist!=null?ps.dist:null,src:'prev'};
-  }
+  const isW=s=>!!(s&&s.t==='W');
+  const warm=isW(en.sets[j]);
+  let k=0;   // this row's position among the rows of its own kind
+  for(let i=0;i<=j;i++)if(isW(en.sets[i])===warm)k++;
+  const pack=(ps,src)=>({t:ps.t,w:ps.w,r:ps.r,rpe:ps.rpe,dur:ps.dur!=null?ps.dur:null,
+    dist:ps.dist!=null?ps.dist:null,src});
+  const same=p?p.sets.filter(s=>isW(s)===warm):[];
+  if(same[k-1])return pack(same[k-1],'prev');
+  // a warm-up never borrows a working set's numbers — nor the template's
+  // working target — and a ramp's extra rung has no meaningful stand-in
+  if(warm)return null;
   // v5.7: adding a set beyond last session's count used to blank PREV entirely
   // — and adding a set is the common case, so the headline feature went missing
   // exactly when it was most useful. Fall back to last session's FINAL working
   // set, which is what you actually want a reference for on set 4. Flagged
   // src:'prevlast' so prevTxt can mark it as carried over rather than matched.
-  if(p&&p.sets.length){
-    const work=p.sets.filter(s=>s.t!=='W');
-    const ps=(work.length?work:p.sets)[(work.length?work:p.sets).length-1];
-    if(ps)return{t:ps.t,w:ps.w,r:ps.r,rpe:ps.rpe,dur:ps.dur!=null?ps.dur:null,
-      dist:ps.dist!=null?ps.dist:null,src:'prevlast'};
-  }
+  if(same.length)return pack(same[same.length-1],'prevlast');
   if(en.tgt&&(en.tgt.w!=null||en.tgt.r!=null||en.tgt.dur!=null||en.tgt.dist!=null))
     return{t:'N',w:en.tgt.w!=null?en.tgt.w:null,r:en.tgt.r!=null?en.tgt.r:null,rpe:en.tgt.rpe!=null?en.tgt.rpe:null,
       dur:en.tgt.dur!=null?en.tgt.dur:null,dist:en.tgt.dist!=null?en.tgt.dist:null,src:'tgt'};
@@ -2243,6 +2309,7 @@ function setRow(i,j){
   const ex=S.ex.get(en.exId),cd=isCardio(ex);
   const g=ghost(en,j);
   const row=h('div',{class:'setrow'+(st.done?' done':'')+(st.pr?' prset':'')});
+  ROW_OF.set(st,row);
   const typeBtn=h('button',{class:'set-type t'+st.t,onclick:()=>setTypeMenu(i,j)},
     st.t==='N'?String(setNumber(en,j)):st.t);
   // middle two inputs: weight × reps for lifting, minutes × distance for cardio
@@ -2327,13 +2394,16 @@ function toggleDone(i,j,row,in1,in2){
       ||(st.rpe!=null&&st.rpe>=9));
   }else{
     st.done=false;row.classList.remove('done');
+    // an unticked set is no longer a record — and may have been the only
+    // thing stopping a later set from being one
+    recheckPRs(en.exId,st,row);
   }
   updateWoStats();saveActive();
 }
 function setTypeMenu(i,j){
   const en=S.active.exs[i],st=en.sets[j];
   const opt=(t,label)=>h('button',{class:'btn mt8'+(st.t===t?' primary':''),onclick:()=>{
-    st.t=t;saveActive();close();replaceCard(i);
+    st.t=t;recheckPRs(en.exId);saveActive();close();replaceCard(i);
   }},label);
   const close=sheet('Set type',h('div',{},
     opt('N','Normal'),opt('W','Warm-up'),opt('D','Drop set'),opt('F','Failure'),
@@ -2341,7 +2411,7 @@ function setTypeMenu(i,j){
     h('button',{class:'btn danger mt12',onclick:()=>{
       en.sets.splice(j,1);
       if(!en.sets.length)en.sets.push(newSet());
-      saveActive();close();replaceCard(i);
+      recheckPRs(en.exId);saveActive();close();replaceCard(i);
     }},'Delete set')));
 }
 
@@ -2425,16 +2495,42 @@ function checkCardioPR(ex,st,row,quiet){
   if(!quiet)announcePR(res,st);
   return res;
 }
+/* Live PR flags, re-derived from scratch for one exercise: finished history
+   first, then this session's done sets in row order — the order they get
+   ticked in. Editing, unticking, deleting or re-typing one set can change
+   which OTHER sets are records (lower set 1 and set 2 may become one), so
+   every flag is recomputed rather than one patched. The old per-set check
+   rebuilt records from finished history ONLY, forgetting a heavier set logged
+   minutes earlier: merely retyping the reps on a lighter set re-crowned it
+   with a false "weight PR", and an unticked record kept its gold ring (and
+   was saved as a PR even after being edited below your best). Quiet by
+   design — announcing stays the caller's decision. Returns the check result
+   for `target`, painting it on `targetRow` when given. */
+const ROW_OF=new WeakMap();   // set object → its rendered row, for repainting flags
+function recheckPRs(exId,target,targetRow){
+  S.records[exId]=computeRecords(exId);
+  let out=null;
+  if(!S.active)return out;
+  for(const en of S.active.exs){
+    if(en.exId!==exId)continue;
+    for(const st of en.sets){
+      const row=st===target&&targetRow?targetRow:ROW_OF.get(st)||null;
+      st.pr=0;
+      if(row)row.classList.remove('prset');
+      if(!st.done)continue;
+      const res=checkPR(exId,st,row,true);
+      if(st===target)out=res;
+    }
+  }
+  return out;
+}
 // editing a set AFTER ticking it saves immediately (inputs write straight to
-// state + autosave); this re-checks the PR flag so a lowered weight doesn't
+// state + autosave); this re-checks the PR flags so a lowered weight doesn't
 // keep a stale gold ring, without re-firing toasts/confetti
 let PR_EDIT_T=null;
 function reverifySet(en,st,row){
   if(!st.done)return;
-  st.pr=0;
-  if(row)row.classList.remove('prset');
-  S.records[en.exId]=computeRecords(en.exId);
-  const res=checkPR(en.exId,st,row,true);   // silent pass: the gold ring tracks every keystroke
+  const res=recheckPRs(en.exId,st,row);   // silent pass: the gold ring tracks every keystroke
   saveActive();
   // …but an edit that turns a set INTO a record deserves the same celebration
   // as ticking one does. Debounced so typing 1 → 10 → 100 fires once, when you
@@ -2449,7 +2545,10 @@ function reverifySet(en,st,row){
 /* ----- exercise / workout menus ----- */
 function bestWeightGuess(en){
   for(let j=en.sets.length-1;j>=0;j--)if(en.sets[j].w)return en.sets[j].w;
-  const g=ghost(en,0);
+  // PREV of the first WORKING row: a warm-up's weight is no guess at what you
+  // are working up to (it made the warm-up calculator ramp towards 40 kg)
+  const jw=en.sets.findIndex(s=>s.t!=='W');
+  const g=ghost(en,jw<0?en.sets.length:jw);
   if(g&&g.w)return g.w;
   const r=S.records[en.exId];
   return r&&r.w?r.w.v:null;
@@ -2472,7 +2571,9 @@ function exMenu(i){
     i<S.active.exs.length-1?mk('Move down',()=>{const x=S.active.exs;[x[i+1],x[i]]=[x[i],x[i+1]];saveActive();renderLog();}):null,
     mk('Remove exercise',async()=>{
       if(await ask('Remove '+(ex?ex.name:'exercise')+'?','Sets logged for it in this workout will be lost.','Remove',true)){
-        S.active.exs.splice(i,1);saveActive();renderLog();
+        // forget its sets' bests too, or re-adding the lift would be judged
+        // against numbers that no longer exist
+        S.active.exs.splice(i,1);recheckPRs(en.exId);saveActive();renderLog();
       }
     },'danger')));
 }
@@ -2614,9 +2715,11 @@ function substituteSheet(i){
   const rows=cands.map(({x})=>{
     const p=prevSetsFor(x.id);
     return h('div',{class:'ex-row',onclick:()=>{
+      const oldId=en.exId;
       en.exId=x.id;
       if(!(x.id in S.prev))S.prev[x.id]=prevSetsFor(x.id);
-      if(!(x.id in S.records))S.records[x.id]=computeRecords(x.id);
+      // gold rings earned against the old lift mean nothing on the new one
+      recheckPRs(x.id);recheckPRs(oldId);
       saveActive();close();replaceCard(i);
       toast('Swapped to '+x.name);
     }},
@@ -2687,7 +2790,13 @@ async function finishWorkout(){
     h('span',{class:'lbl'},'Name'),nameIn,
     h('span',{class:'lbl'},'Notes'),noteIn,
     h('button',{class:'btn green mt12',onclick:save},'Save Workout')));
+  // the save awaits the database before the sheet closes, so a double tap
+  // used to run it twice: the session appeared in History twice (volume and
+  // records counted double until the next launch) under two stacked
+  // "Save as template?" prompts
+  let saving=false;
   async function save(){
+    if(saving)return;saving=true;
     const exs=a.exs.map(en=>({exId:en.exId,notes:en.notes||'',
       sets:en.sets.filter(s2=>s2.done).map(s2=>{
         const o={t:s2.t,w:s2.w,r:s2.r,rpe:s2.rpe};
@@ -2705,11 +2814,12 @@ async function finishWorkout(){
     }
     const w={id:a.id,name:nameIn.value.trim()||a.name,notes:noteIn.value.trim(),
       startedAt:a.startedAt,finishedAt:Date.now(),dur,exs};
-    await dbPut('workouts',w);
+    try{await dbPut('workouts',w);}
+    catch(err){saving=false;toast('Couldn’t save — '+err.message,{dur:5000});return;}
     S.workouts.push(w);
     const tplId=a.tplId;
     S.active=null;S.prev={};S.records={};
-    skipRest();clearTimeout(saveT);await kvDel('active');
+    skipRest();await flushActive();
     close();renderLog();
     toast('Workout saved 💪'+(volPRs.length?' · session volume PR: '+volPRs.join(', '):''),{dur:3500});
     // started from a template and changed its structure → offer to sync the
@@ -2761,9 +2871,11 @@ async function saveActiveToTemplate(){
   toast('Template “'+t.name+'” updated');
 }
 function offerTemplate(w){
+  let busy=false;   // one tap, one template — even a double one
   const close=sheet('Save as template?',h('div',{},
     h('p',{class:'small dim',style:'margin:2px 2px 14px'},'Reuse this workout’s exercises and targets from the Templates tab.'),
     h('button',{class:'btn primary',onclick:async()=>{
+      if(busy)return;busy=true;
       const t={id:uid(),name:w.name,pos:Math.max(0,...S.templates.map(x=>x.pos||0))+1,
         exs:tplTargetsFromWorkout(w)};
       S.templates.push(t);
@@ -3421,13 +3533,20 @@ function drawBodyChart(cv,entries){
 }
 function logBodySheet(key){
   const val=h('input',{class:'in num',inputmode:'decimal',placeholder:key==='Weight'?'Bodyweight ('+S.set.unit+')':key});
-  const date=h('input',{class:'in',type:'date',value:new Date().toISOString().slice(0,10)});
+  // TODAY IN YOUR TIME ZONE. This used toISOString(), which is the UTC date:
+  // the form offered yesterday between midnight and 1 am in a British summer,
+  // every evening in the Americas and every morning in Australia — when most
+  // people weigh in.
+  const date=h('input',{class:'in',type:'date',value:dateKey(Date.now())});
+  let busy=false;   // one tap, one entry — even a double one
   const close=sheet('Log '+key,h('div',{},
     h('span',{class:'lbl'},'Value'),val,
     h('span',{class:'lbl'},'Date'),date,
     h('button',{class:'btn primary mt12',onclick:async()=>{
+      if(busy)return;
       const v=pf(val.value);
       if(v==null){toast('Enter a value');return;}
+      busy=true;
       const d=date.value?new Date(date.value+'T12:00:00').getTime():Date.now();
       const b={id:uid(),date:d,key,value:v};
       S.body.push(b);
@@ -3558,8 +3677,10 @@ const ENC=[
 // gentle nudge when a set lands well below the previous session (once per exercise)
 function maybeEncourage(en,st,j){
   if(en.cheered||st.t==='W'||st.pr)return;
-  const p=S.prev[en.exId],ps=p&&p.sets[j];
-  if(!ps||!ps.w||!ps.r||!st.w||!st.r)return;
+  // the same matched set PREV shows — never a warm-up, and never a carried-over
+  // stand-in (a bonus set 4 being lighter than set 3 is not a bad day)
+  const ps=ghost(en,j);
+  if(!ps||ps.src!=='prev'||!ps.w||!ps.r||!st.w||!st.r)return;
   const nowE=epley(st.w,st.r),beforeE=epley(ps.w,ps.r);
   if(beforeE>0&&nowE<beforeE*.88){
     en.cheered=true;
@@ -4490,6 +4611,11 @@ async function boot(){
   document.addEventListener('visibilitychange',()=>{
     if(document.visibilityState==='visible'){schedTick();if(S.tab==='log'&&!S.active)renderLog();}
   });
+  // …and hiding it is the last reliable moment to land a pending autosave
+  const flushPending=()=>{if(saveT!=null)flushActive();};
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')flushPending();});
+  addEventListener('pagehide',flushPending);
+  document.addEventListener('freeze',flushPending);
   // iOS keyboard healing: the keyboard pans the page to reveal the focused
   // input and can leave it panned after dismissal (header clipped under the
   // status bar, dead space under the nav). Centre focused inputs inside the
@@ -4561,7 +4687,9 @@ async function boot(){
     ensurePersistence,storageReport,STORE_ST,fmtBytes,
     backupNagDue,backupNagCard,backupDueDays,BK,noteBackup,canShareBackup,
     ghost,applyTheme,themeIsLight,SHEETS,
-    exportJSON,importJSON,APP_VER};
+    exportJSON,importJSON,APP_VER,
+    // atomic restore, live PR re-derivation, autosave flush, local dates
+    recheckPRs,saveActive,flushActive,backupFileName,bestWeightGuess};
   switchTab('log');
   applyLaunchIntent();
 }
