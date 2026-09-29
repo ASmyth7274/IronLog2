@@ -17,7 +17,10 @@
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
 <link rel="icon" type="image/png" sizes="64x64" href="favicon-64.png">
 <title>IronLog</title>
-<script defer src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<!-- Chart.js 4.5.1 (MIT, see vendor/), shipped with the app rather than fetched
+     from a CDN: the service worker precaches it, so charts work offline from
+     the very first launch and a CDN release can never change them unannounced -->
+<script defer src="vendor/chart.umd.min.js"></script>
 <style>
 :root{
   /* dark: "white on black" editorial theme */
@@ -840,6 +843,24 @@ details.set-adv[open]>summary{color:var(--acc)}
 .ed-ex:first-child{border-top:0;padding-top:4px}
 .edrow{display:grid;grid-template-columns:36px 1fr 1fr 56px 36px;gap:6px;align-items:center;margin-top:6px}
 .edrow.sethead{margin-top:8px}
+/* exercise history */
+.exname[role=button]{cursor:pointer}
+.spark-box{height:58px;margin:8px 2px 10px}
+.spark-box svg{width:100%;height:100%;display:block;overflow:visible}
+.hist-row{display:block;width:100%;text-align:left;padding:11px 13px 12px;margin-top:8px;border-radius:14px;
+  background:var(--card2);transition:transform .12s}
+.hist-row:active{transform:scale(.99)}
+.hist-row .row{gap:8px}
+.hist-sets{font-size:15px;margin-top:5px;line-height:1.45;color:var(--text)}
+/* forgot to finish */
+.stale{display:flex;flex-direction:column;gap:10px;margin:0 0 12px;padding:14px;border-radius:16px;
+  background:var(--tint);border:1px solid var(--tint-2)}
+.stale-t{font-weight:700}
+.stale .row{gap:8px}
+/* update ready */
+.upd{display:flex;align-items:center;gap:10px;margin:0 0 12px;padding:12px 14px;border-radius:16px;
+  background:var(--card);border:1px solid var(--line)}
+.upd .grow{min-width:0}
 </style>
 </head>
 <body>
@@ -1100,9 +1121,59 @@ function resumeCheck(now){
   RESUME.n++;
   schedTick();
   if(S.tab==='log'&&!S.active)renderLog();           // "today", the week strip, the greeting
+  else showStale();                                  // …or a session left open
   if(RT.on)tickRest();
   setTimeout(()=>healShrink(),300);
+  checkForUpdate();
   return true;
+}
+
+/* ---------------- updates ----------------
+   An installed app gets a new version by loading the page again, and the
+   network-first service worker hands it the new one whenever it does. But a
+   Home Screen app can be resumed from memory for days without one reload, so
+   a new version published on GitHub Pages never arrived. So the app asks: at
+   launch, on every return from the background and every half hour while open
+   (at most once per 30 min), it reads the live index.html's APP_VER. A newer
+   one puts a card on the Log tab, and one tap reloads into it. The session
+   in progress is written first, so updating never costs a set. */
+const UPD={checkedAt:0,ver:null,ok:false};
+function newerVer(a,b){   // numeric, part by part: 5.10 is newer than 5.9
+  const x=String(a||'').split('.').map(n=>parseInt(n,10)||0),y=String(b||'').split('.').map(n=>parseInt(n,10)||0);
+  for(let i=0;i<Math.max(x.length,y.length);i++)if((x[i]||0)!==(y[i]||0))return (x[i]||0)>(y[i]||0);
+  return false;
+}
+async function checkForUpdate(force){
+  if(!force&&Date.now()-UPD.checkedAt<30*60e3)return UPD.ver;
+  UPD.checkedAt=Date.now();UPD.ok=false;
+  try{
+    // ?ilcheck: the service worker lets this through to the network untouched,
+    // so offline it fails (rather than the cached copy saying "up to date")
+    const r=await fetch('./index.html?ilcheck='+Date.now(),{cache:'no-store'});
+    if(!r.ok)return UPD.ver;
+    const m=(await r.text()).match(/const APP_VER='([\d.]+)'/);
+    UPD.ok=!!m;
+    if(m&&newerVer(m[1],APP_VER)){UPD.ver=m[1];showUpdate();}
+    // and let the service worker fetch its own new version alongside
+    try{const reg=navigator.serviceWorker&&await navigator.serviceWorker.getRegistration();if(reg)reg.update();}catch(e){}
+  }catch(e){}
+  return UPD.ver;
+}
+function updateCard(){
+  if(!UPD.ver)return null;
+  return h('section',{class:'upd',id:'updcard'},ic('sparkle'),
+    h('div',{class:'grow'},h('div',{class:'bold'},'IronLog '+UPD.ver+' is ready'),
+      h('div',{class:'tiny dim'},S.active?'Your workout is saved first — nothing is lost.':'Takes a second.')),
+    h('button',{class:'btn tint sm inline',onclick:applyUpdate},'Update'));   // today's session keeps the one primary
+}
+function showUpdate(){
+  if(S.tab!=='log'||$('#updcard'))return;
+  const card=updateCard(),pg=$('#page-log');
+  if(card&&pg)pg.prepend(card);
+}
+async function applyUpdate(){
+  try{await flushActive();}catch(e){}
+  location.reload();
 }
 
 const E=(id,name,m,s,e)=>({id,name,m,s,e});
@@ -1606,6 +1677,95 @@ function workoutCardioMin(w){
 }
 const workoutsDesc=()=>[...S.workouts].sort((a,b)=>b.finishedAt-a.finishedAt);
 
+/* ---------------- kg ⇄ lb ----------------
+   5.7 only relabelled: 100 kg became "100 lb", and every record, target and
+   plate with it. Converting rewrites every stored weight (and, as distance
+   follows the unit system, every km ⇄ mi) in ONE transaction, all or nothing.
+   Values keep nine decimals (the screen shows two), and a result within 1e-7
+   of a two-decimal number snaps onto it: everything you type has at most
+   two decimals, so converting back lands on exactly what you logged
+   (100 kg → 220.462262185 lb → 100 kg), which keeps PREV and PRs honest.
+   PR flags stay as logged; scaling keeps which set beat which. */
+const KG_LB=2.20462262185,KM_MI=0.621371192237;
+const STD_BAR={kg:[20,15,10],lb:[45,35,25]};
+const STD_PLATES={kg:[25,20,15,10,5,2.5,1.25],lb:[45,35,25,10,5,2.5]};
+function unitConvert(d,to){
+  const from=to==='lb'?'kg':'lb';
+  const fw=to==='lb'?KG_LB:1/KG_LB,fd=to==='lb'?KM_MI:1/KM_MI;
+  const r2=v=>{const x=Math.round(v*1e9)/1e9,q=Math.round(x*100)/100;return Math.abs(x-q)<1e-7?q:x;};
+  const num=v=>typeof v==='number'&&isFinite(v);
+  // only keys that exist: a strength set without a distance stays without one
+  const conv=(o,k,f)=>{if(o&&num(o[k]))o[k]=r2(o[k]*f);};
+  const sets=a=>(a||[]).forEach(st=>{conv(st,'w',fw);conv(st,'dist',fd);});
+  for(const w of d.workouts)for(const en of w.exs)sets(en.sets);
+  for(const t of d.templates)for(const te of t.exs){conv(te,'w',fw);conv(te,'dist',fd);}
+  if(d.active)for(const en of d.active.exs){sets(en.sets);conv(en.tgt,'w',fw);conv(en.tgt,'dist',fd);}
+  for(const x of d.exercises)conv(x,'baseW',fw);
+  for(const b of d.body)if(b.key==='Weight')conv(b,'value',fw);
+  const s=d.settings;
+  const bi=STD_BAR[from].indexOf(s.barWeight);
+  s.barWeight=bi>=0?STD_BAR[to][bi]:num(s.barWeight)?r2(s.barWeight*fw):STD_BAR[to][0];
+  // a standard plate set becomes the other standard set — nobody owns 11.34 lb plates
+  s.plates=JSON.stringify(s.plates)===JSON.stringify(STD_PLATES[from])?STD_PLATES[to].slice()
+    :(s.plates||[]).map(p=>r2(p*fw));
+  s.unit=to;
+  return d;
+}
+async function convertUnits(to){
+  if(S.set.unit===to)return null;
+  await flushActive();
+  const clone=typeof structuredClone==='function'?structuredClone:v=>JSON.parse(JSON.stringify(v));
+  const d=unitConvert(clone({settings:S.set,exercises:[...S.ex.values()].filter(x=>x.baseW!=null),
+    workouts:S.workouts,templates:S.templates,body:S.body.filter(b=>b.key==='Weight'),active:S.active}),to);
+  await new Promise((res,rej)=>{
+    const tx=db.transaction(['exercises','workouts','templates','body','kv'],'readwrite');
+    tx.oncomplete=()=>res();
+    tx.onabort=()=>rej(tx.error||new Error('the conversion was interrupted'));
+    try{
+      for(const[store,rows]of[['exercises',d.exercises],['workouts',d.workouts],['templates',d.templates],['body',d.body]]){
+        const os=tx.objectStore(store);for(const r of rows)os.put(r);
+      }
+      const kv=tx.objectStore('kv');
+      kv.put(d.settings,'settings');
+      if(d.active)kv.put(d.active,'active');
+    }catch(err){try{tx.abort();}catch(e){}rej(err);}
+  });
+  // only now, with all of it on disk, does memory follow
+  S.set=d.settings;
+  for(const x of d.exercises)S.ex.set(x.id,x);
+  S.workouts=d.workouts;S.templates=d.templates;
+  const nb=new Map(d.body.map(b=>[b.id,b]));S.body=S.body.map(b=>nb.get(b.id)||b);
+  S.active=d.active;S.prev={};S.records={};BW_CACHE=null;
+  if(S.active)for(const en of S.active.exs){S.prev[en.exId]=prevSetsFor(en.exId);S.records[en.exId]=computeRecords(en.exId);}
+  return {workouts:d.workouts.length,templates:d.templates.length,weighIns:d.body.length};
+}
+function unitSwitchSheet(to,{onDone,onCancel}={}){
+  const from=to==='lb'?'kg':'lb',name=to==='lb'?'pounds':'kilograms';
+  const eg=to==='lb'?'100 kg becomes 220.46 lb, and 5 km becomes 3.11 mi.':'225 lb becomes 102.06 kg, and 3 mi becomes 4.83 km.';
+  let chosen=false;
+  const go=async convert=>{
+    if(chosen)return;chosen=true;close();
+    if(convert){
+      try{
+        const n=await convertUnits(to);
+        toast('Converted to '+to+(n?' — '+n.workouts+' workouts, '+n.templates+' templates, '+n.weighIns+' weigh-ins':''),{dur:3500});
+      }catch(err){
+        toast('Couldn’t convert — nothing was changed ('+((err&&err.message)||'error')+')',{dur:6000});
+        if(onCancel)onCancel();return;
+      }
+    }else{S.set.unit=to;BW_CACHE=null;await saveSettings();}   // (the no-weigh-in default is per unit)
+    renderTab();if(onDone)onDone();
+  };
+  const close=sheet('Switch to '+name+'?',h('div',{},
+    h('p',{class:'small dim',style:'margin:2px 2px 14px;line-height:1.5'},
+      'Converting rewrites everything you have logged — sets, targets, body weight, bar and plates — so each number still means the same weight. '+eg),
+    h('button',{class:'btn primary',onclick:()=>go(true)},ic('swap'),'Convert everything to '+to),
+    h('button',{class:'btn tint mt8',onclick:()=>go(false)},'Only change the label'),
+    h('p',{class:'tiny dim',style:'margin:10px 2px 0;line-height:1.5'},
+      'Only change the label if you have been logging in '+to+' all along while the app said '+from+'.')),
+    {onClose:()=>{if(!chosen&&onCancel)onCancel();}});
+}
+
 /* ---------------- settings ---------------- */
 const saveSettings=()=>kvPut('settings',S.set);
 function settingsSheet(){
@@ -1630,6 +1790,16 @@ function settingsSheet(){
   const note=t=>h('p',{class:'set-note'},t);
   const row=(label,ctl)=>h('div',{class:'lrow'},h('div',{class:'grow'},label),ctl);
   const withUnit=(inp,u)=>h('div',{class:'row',style:'gap:6px;flex:0 0 auto'},inp,h('span',{class:'dim small',style:'min-width:18px'},u));
+  // the unit switch converts in place: these fields show the new numbers after
+  // (the sheet is not rebuilt: closing and reopening it races Android's Back)
+  let barIn,barU,platesIn;
+  const uSeg=seg(['kg','lb'],S.set.unit,v=>{
+    if(v===S.set.unit)return;
+    const back=()=>[...uSeg.children].forEach(b=>b.classList.toggle('on',b.textContent===S.set.unit));
+    unitSwitchSheet(v,{onCancel:back,onDone:()=>{
+      back();barIn.value=S.set.barWeight;barU.textContent=S.set.unit;platesIn.value=S.set.plates.join(', ');
+    }});
+  });
 
   /* ---- Profile ---- */
   c.append(sec('Profile'),grp(
@@ -1639,8 +1809,8 @@ function settingsSheet(){
     // this height, which is what turns plotted travel into centimetres of ROM
     row('Height',withUnit(h('input',{class:'row-in num',type:'text',inputmode:'decimal',value:S.set.heightCm||DEF.heightCm,
       oninput:e=>{const v=pf(e.target.value);S.set.heightCm=v>80&&v<250?v:DEF.heightCm;saveSettings();}}),'cm')),
-    row('Units',h('div',{class:'row-seg'},seg(['kg','lb'],S.set.unit,v=>{S.set.unit=v;saveSettings();renderTab();})))),
-    note('Your name is only for the greeting; height sets the scale when you plot a machine. Switching kg ↔ lb relabels your logged numbers — it doesn’t convert them.'));
+    row('Units',h('div',{class:'row-seg'},uSeg))),
+    note('Your name is only for the greeting; height sets the scale when you plot a machine. Switching kg ↔ lb offers to convert everything you have logged.'));
 
   /* ---- Appearance ---- */
   c.append(sec('Appearance'),grp(h('div',{style:'padding:12px 0'},
@@ -1654,9 +1824,9 @@ function settingsSheet(){
     oninput:e=>{S.set[key]=numOr(e.target.value,DEF[key]);saveSettings();}});
   c.append(sec('Workout'),grp(
     row('Default rest',withUnit(numIn('restSec'),'s')),
-    row('Bar weight',withUnit(numIn('barWeight'),S.set.unit)),
+    row('Bar weight',(()=>{barIn=numIn('barWeight');const w=withUnit(barIn,S.set.unit);barU=w.lastChild;return w;})()),
     h('div',{style:'padding:10px 0 12px'},h('div',{style:'margin:0 0 7px'},'Plates you own (per side)'),
-      h('input',{class:'in',inputmode:'text',autocapitalize:'off',autocorrect:'off',spellcheck:'false',value:S.set.plates.join(', '),
+      platesIn=h('input',{class:'in',inputmode:'text',autocapitalize:'off',autocorrect:'off',spellcheck:'false',value:S.set.plates.join(', '),
         oninput:e=>{
           const p=e.target.value.split(/[,\s]+/).map(Number).filter(v=>v>0).sort((a,b)=>b-a);
           if(p.length){S.set.plates=p;saveSettings();}
@@ -1755,6 +1925,16 @@ function settingsSheet(){
   c.append(
     h('button',{class:'btn tint mt8',onclick:pickBackupFile},ic('upload'),'Restore from a backup'),
     h('button',{class:'btn plain danger mt8',onclick:eraseAll},'Erase all data'));
+
+  /* ---- About ---- */
+  c.append(sec('About'),grp(
+    h('div',{class:'lrow'},h('div',{class:'grow'},'IronLog '+APP_VER),
+      h('button',{class:'btn sm inline tint',onclick:async()=>{
+        const v=await checkForUpdate(true);
+        toast(v?'IronLog '+v+' is ready — tap Update on the Log tab'
+          :UPD.ok?'You’re on the latest version':'Couldn’t reach the site — check your connection',{dur:3200});
+      }},ic('download','sm'),'Check for updates'))),
+    note('New versions arrive whenever IronLog opens with a connection, and one that stays open is told when an update is ready.'));
 
   /* ---- Advanced ---- */
   // Display fix escape hatch. 'auto' heals only iOS home-screen mode, which is
@@ -2691,6 +2871,8 @@ function backupNagCard(){
 function renderLog(){
   updateNavDot();
   const pg=$('#page-log');pg.replaceChildren();
+  const upd=updateCard();
+  if(upd)pg.append(upd);
   if(!S.active){
     const g8=greetLine();
     pg.append(h('div',{class:'greet-wrap'},
@@ -2734,6 +2916,8 @@ function renderLog(){
       h('button',{class:'icon-btn','aria-label':'Workout options',onclick:woMenu},ic('more')),
       h('button',{class:'btn green inline',onclick:finishWorkout},'Finish')),
     h('div',{class:'wo-prog'},h('div',{id:'wo-prog'}))));
+  const stale=staleCard();
+  if(stale)pg.append(stale);
   if(a.notes)pg.append(h('div',{class:'note-pill',style:'margin:-2px 0 12px'},ic('note','sm'),h('span',{},a.notes)));
   a.exs.forEach((en,i)=>pg.append(exCard(i)));
   pg.append(
@@ -2758,6 +2942,46 @@ function updateWoStats(){
   if(ve)ve.textContent=fmtVol(vol);
   if(ce)ce.textContent=Math.round(cd);
   if(cw)cw.style.display=cd>0?'':'none';
+}
+/* Forgot to press Finish. The session stayed open until the next launch, so
+   its duration ran to hours and a late-evening workout was filed under the
+   next day. Two hours without a ticked set is not a rest period: offer to
+   finish it when it really ended (the last set, plus a cool-down), or to
+   discard an empty one. "Keep going" silences it for another two hours. */
+const STALE_MS=2*3600e3;
+function staleInfo(a,now){
+  if(!a)return null;
+  const since=Math.max(a.lastAt||0,a.staleAck||0,a.startedAt||0);
+  if(now-since<STALE_MS)return null;
+  const done=a.exs.some(en=>en.sets.some(s2=>s2.done));
+  // a session from before 5.8 has no lastAt: never guess its end from its start
+  return {done,last:a.lastAt||null,endAt:done&&a.lastAt?a.lastAt+5*60e3:null};
+}
+const sinceTxt=ms=>{const m=Math.round(ms/60e3);return m<90?m+' min ago':m<48*60?Math.round(m/60)+' h ago':Math.round(m/1440)+' days ago';};
+// a time, with its day when that isn't today ("Mon 8:05 PM") — the card is
+// usually read the morning after
+const fmtWhen=ts=>(dateKey(ts)===dateKey(Date.now())?'':new Date(ts).toLocaleDateString(undefined,{weekday:'short'})+' ')+fmtTime(ts);
+function staleCard(){
+  const a=S.active,now=Date.now(),inf=staleInfo(a,now);
+  if(!inf)return null;
+  const txt=!inf.done?'Nothing logged since you started, '+sinceTxt(now-a.startedAt)+'.'
+    :inf.last?'Your last set was at '+fmtWhen(inf.last)+', '+sinceTxt(now-inf.last)+'.'
+    :'This workout has been open since '+fmtWhen(a.startedAt)+'.';
+  const card=h('section',{class:'stale'},
+    h('div',{class:'row'},ic('clock'),h('div',{class:'stale-t grow'},'Forgot to finish?')),
+    h('div',{class:'small dim'},txt),
+    h('div',{class:'row'},
+      inf.done?h('button',{class:'btn green sm grow',onclick:()=>finishWorkout(inf.endAt||undefined)},
+          ic('check','sm'),inf.endAt?'Finish at '+fmtWhen(inf.endAt):'Finish now')
+        :h('button',{class:'btn danger sm grow',onclick:discardFlow},ic('trash','sm'),'Discard it'),
+      h('button',{class:'btn tint sm grow',onclick:()=>{a.staleAck=Date.now();saveActive();card.remove();}},'Keep going')));
+  return card;
+}
+// shows the card on a screen that is already up (the app came back, or time passed)
+function showStale(){
+  if(S.tab!=='log'||!S.active||$('#page-log .stale'))return;
+  const card=staleCard(),bar=$('#page-log .wo-bar');
+  if(card&&bar)bar.after(card);
 }
 // per-exercise progress chip: "2/3", then a green "Done" once every set is in
 function exProgEl(en){
@@ -2851,7 +3075,10 @@ function exCard(i){
   const card=h('section',{class:'card',id:'exc'+i});
   card.append(h('div',{class:'ex-h'},
     h('div',{class:'grow'},
-      h('div',{class:'exname'},ex?ex.name:'Unknown exercise'),
+      // the name opens its history — the question most asked between sets
+      h('div',{class:'exname',role:'button',tabindex:'0','aria-label':(ex?ex.name:'Exercise')+' — history',
+        onclick:()=>exHistorySheet(en.exId),
+        onkeydown:e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();exHistorySheet(en.exId);}}},ex?ex.name:'Unknown exercise'),
       h('div',{class:'exsub'},(ex?ex.m+' · '+ex.e+(ex.e==='Bodyweight'?' (+BW counted)':'')
       +(ex&&mechSummary(ex)?' · '+mechSummary(ex):''):'')+(p?'   ·   last done '+fmtDateShort(p.date):'')),
     ),
@@ -3001,6 +3228,7 @@ function toggleDone(i,j,row,in1,in2){
       if(st.r==null&&g&&g.r!=null){st.r=g.r;in2.value=String(g.r);}
     }
     st.done=true;row.classList.add('done');
+    S.active.lastAt=Date.now();   // when training last happened (see staleInfo)
     startRest(ex&&ex.restSec!=null?ex.restSec:S.set.restSec,ex?ex.name:'');
     checkPR(en.exId,st,row);
     maybeEncourage(en,st,j);
@@ -3180,8 +3408,11 @@ function exMenu(i){
   const cd=isCardio(ex);
   const reload=()=>{if(S.tab==='log'&&S.active)renderLog();else renderTab();};
   const swap=d=>()=>{const x=S.active.exs;[x[i+d],x[i]]=[x[i],x[i+d]];saveActive();renderLog();};
+  const nSess=S.workouts.filter(w=>w.exs.some(e2=>e2.exId===en.exId)).length;
   menuSheet(ex?ex.name:'Exercise',[
-    [{icon:'pin',label:'Setup note',sub:ex&&ex.pin?ex.pin:'Seat, grip, gear — shown every session',fn:()=>pinSheet(ex,i)},
+    [{icon:'clock',label:'History',sub:nSess?nSess+' session'+(nSess>1?'s':'')+' · records · every set':'None yet — this is the first',
+       fn:()=>exHistorySheet(en.exId)},
+     {icon:'pin',label:'Setup note',sub:ex&&ex.pin?ex.pin:'Seat, grip, gear — shown every session',fn:()=>pinSheet(ex,i)},
      {icon:'note',label:'Session note',sub:en.notes||'This workout only',fn:()=>noteSheet(en,i)}],
     [{icon:'timer',label:'Rest timer',val:fmtClock(ex&&ex.restSec!=null?ex.restSec:S.set.restSec),
        sub:ex&&ex.restSec!=null?'Set for this exercise':'Your default',fn:()=>restOverrideSheet(ex)},
@@ -3200,6 +3431,62 @@ function exMenu(i){
         S.active.exs.splice(i,1);recheckPRs(en.exId);saveActive();renderLog();
       }
     }}]]);
+}
+/* An exercise's whole story, one tap from the workout: records, a sparkline of
+   each session's best set, and every session with its sets. In 5.7 the
+   workout only showed the last session (PREV), so "what did I do three weeks
+   ago" meant abandoning the session for the Progress tab. */
+function sparkEl(vals){
+  const W=100,H=32,lo=Math.min(...vals),span=(Math.max(...vals)-lo)||1;
+  const pts=vals.map((v,i)=>(vals.length>1?i/(vals.length-1)*W:W/2).toFixed(2)+','+(H-3-(v-lo)/span*(H-6)).toFixed(2)).join(' ');
+  const el=h('div',{class:'spark-box'});
+  el.innerHTML='<svg viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" aria-hidden="true"><polyline points="'+pts
+    +'" fill="none" stroke="var(--data1)" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/></svg>';
+  return el;
+}
+function exHistorySheet(exId){
+  const ex=S.ex.get(exId),cd=isCardio(ex);
+  const sess=workoutsDesc().map(w=>({w,ens:w.exs.filter(e2=>e2.exId===exId)})).filter(x=>x.ens.length);
+  const c=h('div');
+  if(!sess.length){
+    c.append(h('p',{class:'small dim',style:'padding:10px 2px'},'No finished sessions with this exercise yet — today is the first.'));
+    sheet(ex?ex.name:'History',c);return;
+  }
+  const rec=computeRecords(exId),v=(r,f)=>r?f(r.v):'—',unit=' '+S.set.unit;
+  const stat=(val,k)=>h('div',{},h('div',{class:'v num'},val),h('div',{class:'k'},k));
+  c.append(h('div',{class:'statgrid',style:'grid-template-columns:repeat(3,1fr);margin-top:0'},
+    stat(String(sess.length),sess.length===1?'Session':'Sessions'),
+    cd?stat(v(rec.dist,x=>fmtW(round1(x))+' '+distUnit()),'Furthest'):stat(v(rec.e1rm,x=>fmtW(round1(x))+unit),'Best est. 1RM'),
+    cd?stat(v(rec.dur,fmtMin),'Longest'):stat(v(rec.w,x=>fmtW(x)+unit),'Heaviest')));
+  // the best set of each session, oldest first
+  const best=sess.slice().reverse().map(({ens})=>{
+    let b=0;
+    for(const e2 of ens)for(const st of e2.sets){
+      if(st.t==='W')continue;
+      const x=cd?(st.dist||st.dur||0):(st.w&&st.r?epley(loadOf(ex,st),st.r):0);
+      if(x>b)b=x;
+    }
+    return b;
+  }).filter(x=>x>0);
+  if(best.length>1)c.append(sparkEl(best),
+    h('div',{class:'tiny dim',style:'margin:-4px 2px 8px'},'Best set each session — '+(cd?'distance (or time)':'est. 1RM')));
+  const list=h('div'),short=st=>setLine({...st,rpe:null});
+  const paint=n=>list.replaceChildren(...sess.slice(0,n).map(({w,ens})=>{
+    const sets=[],notes=[];let pr=false;
+    for(const e2 of ens){
+      if(e2.notes)notes.push(e2.notes);
+      for(const st of e2.sets){if(st.t==='W')continue;sets.push(short(st));if(st.pr)pr=true;}
+    }
+    return h('button',{class:'hist-row',onclick:()=>workoutSheet(w)},
+      h('div',{class:'row'},h('span',{class:'bold grow'},fmtDate(w.finishedAt)),
+        pr?h('span',{class:'pr-pill'},ic('trophy','sm')):null,h('span',{class:'dim'},ic('chev','sm'))),
+      h('div',{class:'tiny dim'},w.name),
+      h('div',{class:'num hist-sets'},sets.join('  ·  ')||'Warm-ups only'),
+      notes.length?h('div',{class:'tiny dim',style:'font-style:italic'},notes.join(' · ')):null);
+  }),sess.length>n?h('button',{class:'btn tint mt8',onclick:()=>paint(sess.length)},'Show all '+sess.length+' sessions'):'');
+  paint(25);
+  c.append(list);
+  sheet(ex?ex.name:'History',c);
 }
 function noteSheet(en,i){
   const ta=h('textarea',{class:'in',placeholder:'e.g. left shoulder twinge, cut it short…'},en.notes||'');
@@ -3380,9 +3667,12 @@ async function discardFlow(){
 }
 
 /* ----- finish & save ----- */
-async function finishWorkout(){
+// `at` finishes a forgotten session at the time it really ended (a number
+// only: as a click handler this receives the event)
+async function finishWorkout(at){
   const a=S.active;
   if(!a)return;
+  const end=typeof at==='number'&&at>a.startedAt?at:Date.now();
   let done=0,pending=0,vol=0,prs=0,cd=0;
   for(const en of a.exs){
     const ex=S.ex.get(en.exId);
@@ -3397,7 +3687,7 @@ async function finishWorkout(){
     }
     return;
   }
-  const dur=Math.round((Date.now()-a.startedAt)/1000);
+  const dur=Math.round((end-a.startedAt)/1000);
   const nameIn=h('input',{class:'in',value:a.name});
   const noteIn=h('textarea',{class:'in',placeholder:'How did it go?'},a.notes||'');
   const close=sheet('Finish workout',h('div',{},
@@ -3409,6 +3699,8 @@ async function finishWorkout(){
         h('div',{class:'k'},vol||!cd?'Volume':'Cardio')),
       h('div',{},h('div',{class:'v num'},prs?'🏆 '+prs:'—'),h('div',{class:'k'},'PRs'))),
     pending?h('p',{class:'small',style:'color:var(--amb);margin:0 2px 10px'},pending+' incomplete set'+(pending>1?'s':'')+' will be discarded.'):null,
+    at===end?h('p',{class:'small dim',style:'margin:0 2px 10px'},
+      'Ends at '+fmtWhen(end)+', when you last logged a set — not now.'):null,
     h('span',{class:'lbl'},'Name'),nameIn,
     h('span',{class:'lbl'},'Notes'),noteIn,
     h('button',{class:'btn green mt12',onclick:save},'Save Workout')));
@@ -3435,7 +3727,7 @@ async function finishWorkout(){
       if(rec&&!rec.fresh&&rec.vol&&sv>rec.vol.v&&x)volPRs.push(x.name);
     }
     const w={id:a.id,name:nameIn.value.trim()||a.name,notes:noteIn.value.trim(),
-      startedAt:a.startedAt,finishedAt:Date.now(),dur,exs};
+      startedAt:a.startedAt,finishedAt:end,dur,exs};
     try{await dbPut('workouts',w);}
     catch(err){saving=false;toast('Couldn’t save — '+err.message,{dur:5000});return;}
     S.workouts.push(w);
@@ -4114,7 +4406,7 @@ function renderProgress(){
       ),
       h('div',{class:'levelchip'},strengthLabel(sp.score))),
     sp.any?rbox:h('p',{class:'small dim',style:'padding:10px 2px'},'Log free-weight or bodyweight lifts — or plot a machine’s movement — to build your radar.'),
-    info('Best est. 1RM per muscle against bodyweight-scaled standards — 100 ≈ advanced. Counts free weights, bodyweight lifts and any machine you have calibrated. Tune the difficulty in Settings if the label reads too generous (or harsh).')));
+    info('Best est. 1RM per muscle against bodyweight-scaled standards — 100 ≈ advanced. Counts free weights, bodyweight lifts and any machine you have calibrated. Sets past 12 reps are read as 12, since beyond that they measure endurance, and a bodyweight lift counts the share of you it raises (about two-thirds for a push-up). Tune the difficulty in Settings if the label reads too generous (or harsh).')));
   if(sp.any){
     radarFX(rbox);
     const cvr=h('canvas');rbox.append(cvr);
@@ -4923,8 +5215,10 @@ function strengthEligible(ex){
                   only meaningful if a dumbbell press and a barbell press can be
                   added together.
 
-   strengthLoad() workLoad plus the partial-ROM correction. Strength score only,
-                  where the comparison is against bodyweight standards.       */
+   strengthLoad() workLoad plus the partial-ROM correction, counting only the
+                  share of you a bodyweight lift actually raises. Strength
+                  score only, where the comparison is against bodyweight
+                  standards.                                                  */
 function workLoad(ex,st){
   let w=loadOf(ex,st);
   const r=mechRatio(ex);
@@ -4932,7 +5226,29 @@ function workLoad(ex,st){
   if(ex&&ex.uni)w*=2;           // one side logged → both sides were moved
   return w;
 }
-function strengthLoad(ex,st){return workLoad(ex,st)*romFactor(ex);}
+/* A bodyweight lift raises a share of you, not all of you. A push-up lifts
+   about two-thirds (64 % measured at the hands), so scoring it at full
+   bodyweight rated 30 push-ups above a 100 kg × 5 bench. Pull-ups and dips
+   raise nearly everything; a plank or a dead hang is a hold, so only added
+   weight counts. Named by pattern so your own variants are covered too. */
+const BW_SHARE=[[/plank|dead hang|\bhold\b/i,0],[/knee push/i,.5],[/push[- ]?up/i,.65],
+  [/leg raise|knee raise/i,.3],[/back extension|hyperextension/i,.5]];
+function bwShare(ex){
+  const n=(ex&&ex.name)||'';
+  for(const[re,v]of BW_SHARE)if(re.test(n))return v;
+  return 1;
+}
+function strengthLoad(ex,st){
+  let w=workLoad(ex,st);
+  if(ex&&ex.e==='Bodyweight'){
+    const share=bwShare(ex);
+    if(share<1)w-=latestBW()*(1-share)*(mechRatio(ex)||1)*(ex.uni?2:1);
+  }
+  return w*romFactor(ex);
+}
+// Epley flatters long sets: past a dozen reps it measures endurance, and 30
+// reps read as a 2× "1RM". The strength score reads at most this many.
+const STR_REP_CAP=12;
 // one-line human summary for exercise rows / sheets
 function mechSummary(ex){
   const bits=[];
@@ -5118,9 +5434,9 @@ function strengthProfile(){
     if(!strengthEligible(ex))continue;
     for(const st of en.sets){
       if(st.t==='W'||!st.r)continue;
-      const eff=strengthLoad(ex,st);   // BW lifts + machine leverage + per-side doubling
+      const eff=strengthLoad(ex,st);   // BW share + machine leverage + per-side doubling
       if(eff<=0)continue;
-      const e=epley(eff,st.r);
+      const e=epley(eff,Math.min(st.r,STR_REP_CAP));
       if(!best[ex.m]||e>best[ex.m].v)best[ex.m]={v:e,name:ex.name};
     }
   }
@@ -5497,7 +5813,8 @@ async function boot(){
     if(el&&S.active)el.textContent=fmtDur((Date.now()-S.active.startedAt)/1000);
     fixShell();   // heals a short standalone viewport within 1 s, event or not
     healShrink(); // …and one the keyboard left behind (IOS27)
-    if(++tickN%60===0)schedTick();
+    if(++tickN%60===0){schedTick();showStale();}
+    if(tickN%1800===0)checkForUpdate();   // half-hourly while left open
   },1000);
   schedTick();
   // follow the system appearance live while 'auto' is selected
@@ -5512,7 +5829,7 @@ async function boot(){
   // reopening the app is the reliable moment to catch a reminder that came due
   // while it was closed — iOS freezes page JS in the background regardless
   document.addEventListener('visibilitychange',()=>{
-    if(document.visibilityState==='visible'){schedTick();if(S.tab==='log'&&!S.active)renderLog();}
+    if(document.visibilityState==='visible'){schedTick();if(S.tab==='log'&&!S.active)renderLog();checkForUpdate();}
   });
   // …and hiding it is the last reliable moment to land a pending autosave
   const flushPending=()=>{if(saveT!=null)flushActive();};
@@ -5606,9 +5923,15 @@ async function boot(){
     // v5.8: redesign + Technogym presets + workout editing
     TG,tgPlot,tgSuggest,tgBulkSheet,tgPresetSheet,mechFromPlot,saveWorkoutEdit,rederivePRs,
     editWorkoutSheet,workoutSheet,weekStats,menuSheet,pickExercises,settingsSheet,
-    viewportShrunk,remeasureViewport,healShrink,SHRINK,resumeCheck,RESUME};
+    viewportShrunk,remeasureViewport,healShrink,SHRINK,resumeCheck,RESUME,
+    // v5.8 additions: fair strength score, kg ⇄ lb, history, forgotten Finish, updates
+    bwShare,STR_REP_CAP,unitConvert,convertUnits,unitSwitchSheet,exHistorySheet,exMenu,
+    staleInfo,staleCard,showStale,finishWorkout,STALE_MS,
+    UPD,newerVer,checkForUpdate,updateCard,showUpdate,fmtW};
   switchTab('log');
   applyLaunchIntent();
+  // a launch that fell back to the cached copy (no signal) still hears of an update
+  setTimeout(()=>checkForUpdate(true),4000);
 }
 /* The manifest has advertised two long-press shortcuts since v5 ("Start empty
    workout" → ?start=empty, "History" → ?tab=history) but nothing ever read the

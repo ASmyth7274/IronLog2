@@ -5,7 +5,8 @@ const CACHE='ironlog-v4';   // bumped for v5.8 — drops the v5.7 precached shel
 // precached so a fresh install is installable and works offline immediately,
 // rather than only after the network-first handler has seen each request once
 const SHELL=['./','./index.html','./manifest.webmanifest','./icon-192.png',
-  './icon-512.png','./icon-maskable-512.png','./apple-touch-icon.png','./favicon-64.png'];
+  './icon-512.png','./icon-maskable-512.png','./apple-touch-icon.png','./favicon-64.png',
+  './vendor/chart.umd.min.js'];
 
 self.addEventListener('install',e=>{
   e.waitUntil(caches.open(CACHE).then(c=>c.addAll(SHELL)).catch(()=>{}));
@@ -25,7 +26,7 @@ self.addEventListener('notificationclick',e=>{
 });
 
 // Network-first with cache fallback: always fresh while online, and the app
-// (plus the Chart.js CDN file) keeps working offline after the first load.
+// (Chart.js included, now shipped in vendor/) keeps working offline.
 //
 // A gym is rarely OFFLINE, though — it is a basement with one bar of signal,
 // where a request can hang for a minute before failing, and a network-first
@@ -41,12 +42,16 @@ const NET_WAIT=3000;
 self.addEventListener('fetch',e=>{
   const req=e.request;
   if(req.method!=='GET')return;
+  // the app's own update check must hear the network or nothing: a cached copy
+  // would always answer "up to date", and storing a fresh URL every half hour
+  // would only fill the cache. Not intercepted, so it goes straight out.
+  if(new URL(req.url).searchParams.has('ilcheck'))return;
   const nav=req.mode==='navigate';
   const fromCache=()=>caches.match(req).then(m=>m||(nav?caches.match('./index.html'):undefined))
     .catch(()=>undefined);   // never reject: the page must always get an answer
   let stored=Promise.resolve();
   const net=fetch(req).then(r=>{
-    if(r.ok||r.type==='opaque'){   // opaque = the cross-origin CDN script
+    if(r.ok||r.type==='opaque'){   // opaque: a cross-origin reply (5.7's CDN Chart.js)
       const cp=r.clone();
       stored=caches.open(CACHE).then(c=>c.put(req,cp)).catch(()=>{});
     }

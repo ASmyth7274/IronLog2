@@ -12,7 +12,9 @@
    double-tap guards, local dates, autosave-on-hide, the service worker's
    fetch strategy, Technogym presets, editing a finished workout, the v5.8
    redesign's contracts, the iOS 27 home-screen fixes, 5.7 ⇄ 5.8 data
-   compatibility, and a render stress test. */
+   compatibility, the fairer strength score, kg ⇄ lb conversion, exercise
+   history, the forgotten-Finish card, in-app updates and bundled Chart.js,
+   and a render stress test. CI runs it headlessly: ci/run-tests.mjs. */
 (function(){
 const R=[];let only=null;
 const ok=(name,cond,detail)=>{R.push({name,pass:!!cond,detail:cond?(detail||''):('FAILED '+(detail||''))});return !!cond;};
@@ -1606,7 +1608,243 @@ window.__iltest=async function(opts){
       il.S.ex.delete('u57');
     }
 
-    /* ---------- 30. stress test ---------- */
+    /* ---------- 31. the strength score reads strength, not endurance ---------- */
+    {
+      const shut=()=>{document.querySelectorAll('.overlay').forEach(o=>o.remove());il.SHEETS.length=0;};
+      shut();
+      // a 75 kg lifter, through the database so the bodyweight cache sees it
+      await il.dbPut('body',{id:'b31',date:Date.now(),key:'Weight',value:75});
+      await il.loadAll();
+      const bench=il.S.ex.get('x06'),push=il.S.ex.get('x13'),pull=il.S.ex.get('x15'),plank=il.S.ex.get('x51');
+      const sc=il.S.set.strScale||1;
+      /* NEGATIVE CONTROL: 5.7 scored a push-up at full bodyweight and read all
+         30 reps, which put 30 push-ups above a 100 kg × 5 bench */
+      const old30=il.epley(75,30),oldBench=il.epley(100,5);
+      ok('score: NEGATIVE CONTROL — 5.7’s formula rated 30 push-ups above a 100 kg bench',old30>oldBench,
+        Math.round(old30/(75*1.25*sc)*100)+' vs '+Math.round(oldBench/(75*1.25*sc)*100));
+      il.S.workouts=[mkWorkout('x06',[[100,5]],now-3*DAY,'Bench'),mkWorkout('x13',[[0,30]],now-2*DAY,'Push')];
+      const sp=il.strengthProfile();
+      ok('score: a 100 kg × 5 bench now outranks 30 push-ups',sp.best.Chest&&sp.best.Chest.name===bench.name,
+        (sp.best.Chest||{}).name+' '+Math.round((sp.best.Chest||{}).v||0));
+      il.S.workouts=[mkWorkout('x13',[[0,30]],now-2*DAY,'Push')];
+      ok('score: a push-up counts about two-thirds of you, read at 12 reps at most',
+        near(il.strengthProfile().best.Chest.v,il.epley(75*.65,12),1e-6),'est. '+il.strengthProfile().best.Chest.v.toFixed(1));
+      il.S.workouts=[mkWorkout('x06',[[60,20]],now-2*DAY,'Burnout')];
+      ok('score: any set past 12 reps is read as 12',near(il.strengthProfile().best.Chest.v,il.epley(60,12),1e-6));
+      il.S.workouts=[mkWorkout('x15',[[0,8]],now-2*DAY,'Pull')];
+      ok('score: a pull-up still lifts all of you',near(il.strengthProfile().best.Back.v,il.epley(75,8),1e-6));
+      il.S.workouts=[mkWorkout('x51',[[0,60]],now-2*DAY,'Plank')];
+      ok('score: a plank is a hold — no bodyweight "lift" in the score',!il.strengthProfile().per.Abs);
+      ok('score: the share is matched by name, so your own variants count right',
+        il.bwShare({name:'Deficit Push Ups',e:'Bodyweight'})===.65&&il.bwShare({name:'Knee push-up',e:'Bodyweight'})===.5
+          &&il.bwShare({name:'Weighted Dip',e:'Bodyweight'})===1);
+      il.S.workouts=[mkWorkout('x13',[[0,30]],now-2*DAY,'Push')];
+      il.S.records={};
+      ok('score: records keep the numbers as logged (it is the score’s business alone)',
+        near(il.computeRecords('x13').e1rm.v,il.epley(75,30),1e-6));
+      il.S.workouts=[];il.S.records={};
+    }
+
+    /* ---------- 32. kg ⇄ lb converts, all or nothing ---------- */
+    {
+      const shut=()=>{document.querySelectorAll('.overlay').forEach(o=>o.remove());il.SHEETS.length=0;};
+      shut();
+      const keepSet={...il.S.set},keepEx=il.S.ex.get('x06').baseW;
+      il.S.set={...il.S.set,unit:'kg',barWeight:20,plates:[25,20,15,10,5,2.5,1.25]};
+      await il.kvPut('settings',il.S.set);
+      const wS=mkWorkout('x06',[[100,5],[102.5,5]],now-2*DAY,'Conv');wS.exs[0].sets[1].pr=1;
+      delete wS.exs[0].sets[0].dist;delete wS.exs[0].sets[1].dist;
+      const wC={id:uid(),name:'Conv run',finishedAt:now-DAY,dur:1800,notes:'',exs:[{exId:'c03',sets:[{t:'N',w:null,r:null,rpe:6,dur:30,dist:5,done:true},
+        {t:'N',w:null,r:null,rpe:6,dur:5,dist:1.1,done:true}]}]};
+      const tpl={id:'t32',name:'Conv T',pos:0,exs:[{exId:'x06',sets:3,reps:5,w:100,rpe:8},{exId:'c03',sets:1,dur:30,dist:5}]};
+      const bwE={id:'b32',date:now-DAY,key:'Weight',value:80},waist={id:'b32w',date:now-DAY,key:'Waist',value:86};
+      il.S.workouts=[wS,wC];il.S.templates=[tpl];il.S.body=[bwE,waist];
+      il.S.ex.get('x06').baseW=15;
+      for(const w of il.S.workouts)await il.dbPut('workouts',w);
+      await il.dbPut('templates',tpl);await il.dbPut('body',bwE);await il.dbPut('body',waist);
+      await il.dbPut('exercises',il.S.ex.get('x06'));
+      il.S.active={id:uid(),name:'Conv live',startedAt:now-600e3,notes:'',exs:[{exId:'x06',notes:'',tgt:{w:70,r:5,rpe:8},
+        sets:[{t:'N',w:60,r:5,rpe:8,dur:null,dist:null,done:true}]}]};
+      await il.flushActive();
+      const n=await il.convertUnits('lb');
+      const dbW=async id=>(await il.allOf('workouts')).find(w=>w.id===id);
+      const sW=(await dbW(wS.id)).exs[0].sets,sC=(await dbW(wC.id)).exs[0].sets[0];
+      const dT=(await il.allOf('templates')).find(t=>t.id==='t32'),dB=(await il.allOf('body'));
+      const dA=await il.kvGet('active'),dS=await il.kvGet('settings');
+      ok('units: every logged weight is converted, on disk',near(sW[0].w,220.462262185,1e-6)&&near(sW[1].w,225.97381874,1e-6)
+        &&il.fmtW(sW[0].w)==='220.46',sW.map(s=>s.w).join(', '));
+      ok('units: …distances too, since km ⇄ mi follows the unit',near(sC.dist,3.106855961,1e-6)&&sC.dur===30,sC.dist+' mi');
+      ok('units: …template targets, body weight and an exercise’s own bar',
+        near(dT.exs[0].w,220.462262185,1e-6)&&near(dT.exs[1].dist,3.106855961,1e-6)&&near(dB.find(b=>b.id==='b32').value,176.369809748,1e-6)
+          &&near((await il.allOf('exercises')).find(x=>x.id==='x06').baseW,33.069339328,1e-6));
+      ok('units: other measurements keep their numbers (a waist is not a weight)',dB.find(b=>b.id==='b32w').value===86);
+      ok('units: the session in progress converts, set and target',near(dA.exs[0].sets[0].w,132.277357311,1e-6)&&near(dA.exs[0].tgt.w,154.32358353,1e-6)
+        &&near(il.S.active.exs[0].sets[0].w,132.277357311,1e-6));
+      ok('units: a standard bar and plate set become the lb standards',dS.unit==='lb'&&dS.barWeight===45
+        &&JSON.stringify(dS.plates)==='[45,35,25,10,5,2.5]');
+      ok('units: nothing gains a field it never had, and trophies stay',!('dist' in sW[0])&&sW[1].pr===1&&!sW[0].pr);
+      ok('units: memory follows the disk',il.S.set.unit==='lb'&&near(il.S.workouts.find(w=>w.id===wS.id).exs[0].sets[0].w,220.462262185,1e-6),
+        JSON.stringify(n));
+      await il.convertUnits('kg');
+      const back=(await dbW(wS.id)).exs[0].sets;
+      ok('units: converting back returns exactly what you logged (so PREV and PRs are untouched)',back[0].w===100&&back[1].w===102.5
+        &&(await dbW(wC.id)).exs[0].sets[0].dist===5&&(await dbW(wC.id)).exs[0].sets[1].dist===1.1&&(await il.allOf('body')).find(b=>b.id==='b32').value===80
+        &&il.S.set.barWeight===20&&JSON.stringify(il.S.set.plates)==='[25,20,15,10,5,2.5,1.25]');
+      // the other directions, on values plain nine-decimal rounding drifts on
+      const lbs=[54.18,339.05,260.81,11.82,173.39,225];
+      const rt=il.unitConvert(il.unitConvert({settings:{unit:'lb',barWeight:45,plates:[45,35,25,10,5,2.5]},exercises:[],templates:[],body:[],active:null,
+        workouts:[{id:'rt',exs:[{exId:'x06',sets:lbs.map(w=>({t:'N',w,r:5}))},{exId:'c03',sets:[{t:'N',dur:10,dist:0.7},{t:'N',dur:10,dist:1.1}]}]}]},'kg'),'lb');
+      ok('units: lb → kg → lb comes back exact too',JSON.stringify(rt.workouts[0].exs[0].sets.map(x=>x.w))===JSON.stringify(lbs)
+        &&rt.workouts[0].exs[1].sets.map(x=>x.dist).join()==='0.7,1.1'&&rt.settings.barWeight===45,
+        rt.workouts[0].exs[0].sets.map(x=>x.w).join(', '));
+      il.S.set.plates=[20,10,5];
+      const custom=il.unitConvert({settings:{...il.S.set},exercises:[],workouts:[],templates:[],body:[],active:null},'lb');
+      ok('units: plates you listed yourself convert as they are',JSON.stringify(custom.settings.plates.map(p=>il.fmtW(p)))==='["44.09","22.05","11.02"]',
+        JSON.stringify(custom.settings.plates));
+      il.S.set.plates=[25,20,15,10,5,2.5,1.25];
+      // all or nothing: one record the database refuses aborts the lot
+      il.S.workouts.push({name:'no id',finishedAt:now,dur:1,notes:'',exs:[{exId:'x06',sets:[{t:'N',w:50,r:5,done:true}]}]});
+      let threw=false;try{await il.convertUnits('lb');}catch(e){threw=true;}
+      ok('units: a failure part-way changes nothing at all',threw&&il.S.set.unit==='kg'
+        &&(await dbW(wS.id)).exs[0].sets[0].w===100&&(await il.kvGet('settings')).unit==='kg'&&il.S.workouts[0].exs[0].sets[0].w===100);
+      il.S.workouts.pop();
+      // the real flow: Settings → Units → lb → Convert
+      il.S.active=null;await il.flushActive();
+      document.querySelector('#gearbtn').click();await sleep(300);
+      const lbBtn=[...document.querySelectorAll('.overlay .row-seg button')].find(b=>b.textContent==='lb');
+      lbBtn.click();await sleep(300);
+      [...document.querySelectorAll('.overlay .btn.primary')].find(b=>/Convert everything to lb/.test(b.textContent)).click();
+      await sleep(600);
+      const barIn=[...document.querySelectorAll('.overlay .lrow')].find(r=>/Bar weight/.test(r.textContent));
+      ok('units: Settings converts through the sheet and shows the new numbers',
+        il.S.set.unit==='lb'&&!!barIn&&barIn.querySelector('input').value==='45'&&/lb/.test(barIn.textContent),
+        barIn?barIn.textContent:'');
+      shut();try{history.replaceState({ilSheet:0},'');}catch(e){}
+      await il.convertUnits('kg');
+      // relabel only, for numbers already logged in lb
+      il.unitSwitchSheet('lb');await sleep(250);
+      [...document.querySelectorAll('.overlay .btn')].find(b=>/Only change the label/.test(b.textContent)).click();await sleep(300);
+      ok('units: "Only change the label" keeps every number',il.S.set.unit==='lb'&&(await dbW(wS.id)).exs[0].sets[0].w===100);
+      shut();try{history.replaceState({ilSheet:0},'');}catch(e){}
+      il.S.set=keepSet;await il.kvPut('settings',il.S.set);
+      if(keepEx==null)delete il.S.ex.get('x06').baseW;else il.S.ex.get('x06').baseW=keepEx;
+      il.S.workouts=[];il.S.templates=[];
+    }
+
+    /* ---------- 33. an exercise's history, from inside the workout ---------- */
+    {
+      const shut=()=>{document.querySelectorAll('.overlay').forEach(o=>o.remove());il.SHEETS.length=0;};
+      shut();
+      il.S.workouts=[mkWorkout('x06',[[95,5]],now-9*DAY,'H1'),mkWorkout('x06',[[100,5],[100,4]],now-5*DAY,'H2'),
+        mkWorkout('x06',[[102.5,5]],now-DAY,'H3'),mkWorkout('x19',[[70,8]],now-DAY,'Other')];
+      il.S.records={};
+      il.exHistorySheet('x06');await sleep(300);
+      const rows=[...document.querySelectorAll('.overlay .hist-row')];
+      ok('history: every session with the exercise, newest first',rows.length===3&&/H3/.test(rows[0].textContent)
+        &&/H1/.test(rows[2].textContent),rows.map(r=>r.querySelector('.tiny').textContent).join(' · '));
+      ok('history: each session lists its sets',/100 × 5\s+·\s+100 × 4/.test(rows[1].textContent),rows[1].textContent);
+      const pts=(document.querySelector('.overlay .spark-box polyline')||{getAttribute:()=>''}).getAttribute('points').trim().split(/\s+/);
+      ok('history: a sparkline of the best set per session',pts.length===3);
+      ok('history: records up top',/Best est\. 1RM/.test(document.querySelector('.overlay .statgrid').textContent)
+        &&/3\s*Sessions/.test(document.querySelector('.overlay .statgrid').textContent));
+      shut();
+      il.S.active={id:uid(),name:'H live',startedAt:now-600e3,notes:'',exs:[{exId:'x06',notes:'',
+        sets:[{t:'N',w:null,r:null,rpe:null,dur:null,dist:null,done:false}]}]};
+      il.S.prev={};il.S.records={};il.switchTab('log');await sleep(80);
+      il.exMenu(0);await sleep(250);
+      const first=document.querySelector('.overlay .menu-row');
+      ok('history: first in the exercise menu, with a count',!!first&&/History/.test(first.textContent)&&/3 sessions/.test(first.textContent),
+        first?first.textContent:'');
+      first.click();await sleep(400);
+      ok('history: …and it opens',document.querySelectorAll('.overlay .hist-row').length===3);
+      shut();
+      document.querySelector('#exc0 .exname').click();await sleep(300);
+      ok('history: tapping the exercise name opens it too',document.querySelectorAll('.overlay .hist-row').length===3);
+      shut();try{history.replaceState({ilSheet:0},'');}catch(e){}
+      il.exHistorySheet('x44');await sleep(200);
+      ok('history: an exercise never done says so',/today is the first/.test(document.querySelector('.overlay').textContent));
+      shut();try{history.replaceState({ilSheet:0},'');}catch(e){}
+      il.S.active=null;await il.flushActive();il.S.workouts=[];
+    }
+
+    /* ---------- 34. a forgotten Finish ends when the training did ---------- */
+    {
+      const shut=()=>{document.querySelectorAll('.overlay').forEach(o=>o.remove());il.SHEETS.length=0;};
+      shut();
+      const act=o=>({id:uid(),name:'Evening',startedAt:now-5*3600e3,notes:'',exs:[{exId:'x06',notes:'',
+        sets:[{t:'N',w:100,r:5,rpe:8,dur:null,dist:null,done:true},{t:'N',w:null,r:null,rpe:null,dur:null,dist:null,done:false}]}],...o});
+      const si=il.staleInfo;
+      ok('stale: two quiet hours after the last set is a forgotten Finish',
+        (si(act({lastAt:now-3*3600e3}),now)||{}).endAt===now-3*3600e3+5*60e3);
+      ok('stale: a normal rest is not',si(act({lastAt:now-20*60e3}),now)===null);
+      ok('stale: "Keep going" silences it for two more hours',si(act({lastAt:now-3*3600e3,staleAck:now-60e3}),now)===null);
+      ok('stale: a 5.7 session without a last-set time is never ended at its start',
+        (si(act({}),now)||{}).endAt===null&&si(act({}),now).done===true);
+      ok('stale: nothing ticked at all offers to discard instead',si(act({exs:[{exId:'x06',notes:'',sets:[{t:'N',done:false}]}]}),now).done===false);
+      // ticking a set records when training last happened
+      il.S.active=act({startedAt:now-600e3});il.S.prev={};il.S.records={};il.S.workouts=[];
+      il.switchTab('log');await sleep(80);
+      document.querySelectorAll('#exc0 .setrow .chk')[1].click();await sleep(60);
+      ok('stale: ticking a set stamps the time',Math.abs((il.S.active.lastAt||0)-Date.now())<2000);
+      const rs=document.querySelector('#rt-skip');if(rs)rs.click();
+      // the real flow: the card, then Finish at the last set
+      const lastAt=now-3*3600e3-7*60e3;
+      il.S.active=act({lastAt});il.switchTab('log');await sleep(80);
+      const card=document.querySelector('#page-log .stale');
+      // (the label gains a weekday when the last set was on another day)
+      ok('stale: the card offers to finish at the last set',!!card&&card.textContent.includes('Finish at ')
+        &&card.textContent.includes(new Date(lastAt+5*60e3).toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'})),
+        card?card.textContent:'no card');
+      [...card.querySelectorAll('button')].find(b=>/Finish at/.test(b.textContent)).click();await sleep(300);
+      ok('stale: the finish sheet says when it will end',/when you last logged a set/.test(document.querySelector('.overlay').textContent));
+      const id=il.S.active.id,st0=il.S.active.startedAt;
+      [...document.querySelectorAll('.overlay .btn.green')].find(b=>/Save Workout/.test(b.textContent)).click();await sleep(500);
+      const saved=il.S.workouts.find(w=>w.id===id);
+      ok('stale: the workout ends at the last set plus a cool-down, not now',
+        !!saved&&saved.finishedAt===lastAt+5*60e3&&saved.dur===Math.round((lastAt+5*60e3-st0)/1000),
+        saved?new Date(saved.finishedAt).toISOString()+' · '+saved.dur+' s':'not saved');
+      shut();try{history.replaceState({ilSheet:0},'');}catch(e){}
+      // a normal Finish still ends now (the button hands the handler a click event)
+      il.S.active=act({startedAt:now-1800e3,lastAt:Date.now()-60e3});il.switchTab('log');await sleep(80);
+      ok('stale: no card while you are training',!document.querySelector('#page-log .stale'));
+      document.querySelector('#page-log .wo-bar .btn.green').click();await sleep(300);
+      const id2=il.S.active.id;
+      [...document.querySelectorAll('.overlay .btn.green')].find(b=>/Save Workout/.test(b.textContent)).click();await sleep(500);
+      const s2=il.S.workouts.find(w=>w.id===id2);
+      ok('stale: an ordinary Finish ends now',!!s2&&Math.abs(s2.finishedAt-Date.now())<5000&&s2.dur>1700,
+        s2?s2.finishedAt+' · '+s2.dur:'not saved');
+      shut();try{history.replaceState({ilSheet:0},'');}catch(e){}
+      // "Keep going" removes the card and remembers it
+      il.S.active=act({lastAt:now-3*3600e3});il.switchTab('log');await sleep(80);
+      [...document.querySelectorAll('#page-log .stale button')].find(b=>/Keep going/.test(b.textContent)).click();await sleep(60);
+      ok('stale: "Keep going" dismisses it',!document.querySelector('#page-log .stale')&&il.S.active.staleAck>0);
+      il.S.active=null;await il.flushActive();il.S.workouts=[];
+    }
+
+    /* ---------- 35. updates reach the installed app; charts ship with it ---------- */
+    {
+      const nv=il.newerVer;
+      ok('update: versions compare as numbers',nv('5.10','5.9')&&nv('5.9','5.8')&&nv('6','5.9.9')&&!nv('5.8','5.8')&&!nv('5.7','5.8'));
+      const v=await il.checkForUpdate(true);
+      ok('update: checks the live page, and this build is current',v===null&&il.UPD.ok===true);
+      let polluted=false;
+      for(const k of await caches.keys())if((await (await caches.open(k)).keys()).some(r=>r.url.includes('ilcheck')))polluted=true;
+      ok('update: the check goes past the offline cache and stores nothing',!polluted&&!!navigator.serviceWorker.controller,
+        navigator.serviceWorker.controller?'':'(page not controlled by the service worker)');
+      il.UPD.ver='9.9';il.switchTab('log');await sleep(60);
+      const uc=document.querySelector('#page-log #updcard');
+      ok('update: a newer version puts a one-tap Update on the Log tab',!!uc&&/9\.9 is ready/.test(uc.textContent)
+        &&[...uc.querySelectorAll('button')].some(b=>b.textContent==='Update'));
+      il.UPD.ver=null;il.switchTab('log');
+      const ext=[...document.scripts].filter(s=>s.src&&new URL(s.src).origin!==location.origin);
+      ok('offline: Chart.js ships with the app — no script from another site',!ext.length&&!!window.Chart
+        &&[...document.scripts].some(s=>/vendor\/chart\.umd\.min\.js$/.test(s.src)),ext.map(s=>s.src).join(' '));
+      const swTxt=await (await fetch('sw.js',{cache:'no-store'})).text();
+      ok('offline: …and the service worker precaches it for the first launch',swTxt.includes("'./vendor/chart.umd.min.js'"));
+      ok('offline: …with its MIT licence alongside',(await fetch('vendor/chart.js-LICENSE.md')).ok);
+    }
+
+    /* ---------- 36. stress test ---------- */
     const N=opts.stress===false?0:400;
     if(N){
       const ids=[...il.S.ex.values()].filter(x=>!x.cardio).slice(0,12).map(x=>x.id);
