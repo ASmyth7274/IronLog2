@@ -1,0 +1,28 @@
+# Runs the in-app regression suite (tests.js) in headless Chromium on every
+# push and pull request, in three time zones — date logic is where bugs hide.
+name: tests
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  suite:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        tz: [Europe/London, America/Los_Angeles, Pacific/Auckland]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install Playwright and Chromium
+        run: |
+          npm install --no-save --no-package-lock playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Run the suite
+        run: node ci/run-tests.mjs --tz=${{ matrix.tz }}
