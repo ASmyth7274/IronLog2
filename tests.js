@@ -14,6 +14,7 @@
    redesign's contracts, the iOS 27 home-screen fixes, 5.7 ⇄ 5.8 data
    compatibility, the fairer strength score, kg ⇄ lb conversion, exercise
    history, the forgotten-Finish card, in-app updates and bundled Chart.js,
+   the v5.9 accents, streak, consistency grid, History search and estimates,
    and a render stress test. CI runs it headlessly: ci/run-tests.mjs. */
 (function(){
 const R=[];let only=null;
@@ -1886,7 +1887,200 @@ window.__iltest=async function(opts){
       il.S.active=null;await il.flushActive();il.S.workouts=[];il.S.records={};
     }
 
-    /* ---------- 37. stress test ---------- */
+    /* ---------- 37. v5.9: the contracts behind the new looks ---------- */
+    {
+      document.querySelectorAll('.overlay').forEach(o=>o.remove());il.SHEETS.length=0;
+      try{history.replaceState({ilSheet:0},'');}catch(e){}
+      il.S.active=null;il.S.templates=[];il.S.set.sched=null;
+      const lum=hex=>{
+        const c=[1,3,5].map(i=>parseInt(hex.slice(i,i+2),16)/255)
+          .map(v=>v<=.03928?v/12.92:Math.pow((v+.055)/1.055,2.4));
+        return .2126*c[0]+.7152*c[1]+.0722*c[2];
+      };
+      const ratio=(a,b)=>{const x=lum(a),y=lum(b);return (Math.max(x,y)+.05)/(Math.min(x,y)+.05);};
+      const tok=n=>getComputedStyle(document.body).getPropertyValue(n).trim();
+
+      // (1) the accent: a choice, legible in both themes, and optional in a save
+      const wasAcc=il.S.set.accent,wasTheme=il.S.set.theme;
+      il.S.set.theme='dark';il.S.set.accent='gold';il.applyTheme();
+      const gold=tok('--acc').toLowerCase();
+      il.S.set.accent='azure';il.applyTheme();
+      const azure=tok('--acc').toLowerCase();
+      ok('accent: choosing one repaints the accent',gold!==azure&&document.body.getAttribute('data-acc')==='azure',gold+' → '+azure);
+      /* Tints and chart colours are DERIVED from the accent. A custom property
+         that references another resolves where it is declared, so declared on
+         :root they would stay gold under every accent. */
+      ok('accent: tints and chart colours follow it',/98,\s*171,\s*255/.test(tok('--tint'))&&tok('--data1').toLowerCase()===azure,
+        tok('--tint')+' / '+tok('--data1'));
+      const badAcc=[];
+      for(const th of['dark','light'])for(const a of il.ACCENTS){
+        il.S.set.theme=th;il.S.set.accent=a[0];il.applyTheme();
+        const acc=tok('--acc'),card=tok('--card'),ink=tok('--acc-ink'),lo=tok('--acc-lo');
+        if(!/^#[0-9a-f]{6}$/i.test(acc)||ratio(acc,card)<4.5)badAcc.push(th+' '+a[0]+' text '+ratio(acc,card).toFixed(2));
+        if(ratio(ink,th==='light'?acc:lo)<4.5)badAcc.push(th+' '+a[0]+' button label '+ratio(ink,th==='light'?acc:lo).toFixed(2));
+        if(acc.toLowerCase()!==a[th==='light'?3:2].toLowerCase())badAcc.push(th+' '+a[0]+' swatch ≠ stylesheet');
+      }
+      ok('accent: every accent clears 4.5:1 as text and under a button label, in both themes',!badAcc.length,badAcc.join(', ')||il.ACCENTS.length+' accents × 2 themes');
+      il.S.set.theme='dark';il.S.set.accent='no-such-colour';il.applyTheme();
+      const fellBack=!document.body.hasAttribute('data-acc')&&tok('--acc').toLowerCase()===gold;
+      delete il.S.set.accent;il.applyTheme();
+      ok('accent: an unknown or missing value is gold — a 5.8 save has none',fellBack&&!document.body.hasAttribute('data-acc')&&tok('--acc').toLowerCase()===gold);
+      il.S.set.theme=wasTheme;if(wasAcc===undefined)delete il.S.set.accent;else il.S.set.accent=wasAcc;il.applyTheme();
+      const v58set={unit:'kg',restSec:120,barWeight:20,plates:[25,20,15,10,5,2.5,1.25],sound:true,vibrate:true,notify:false,
+        theme:'dark',name:'',strScale:1,coachOff:[],heightCm:175,shellFix:'auto',sched:null};
+      await il.applyImport({app:'ironlog',version:1,exportedAt:new Date().toISOString(),settings:{...v58set},
+        exercises:[...il.S.ex.values()],workouts:[],templates:[],body:[],photos:[],deadSeeds:[]});
+      const out59=(await il.buildExportData()).settings;
+      const extra=Object.keys(out59).filter(k=>!(k in v58set));
+      ok('compat58: a 5.8 save opens as it was, and 5.9 adds one optional setting',
+        Object.keys(v58set).every(k=>JSON.stringify(out59[k])===JSON.stringify(v58set[k]))&&extra.join()==='accent'&&out59.accent==='gold',
+        'added: '+extra.join(','));
+
+      // (2) the week streak
+      const mon=(()=>{const d=new Date(now);d.setHours(0,0,0,0);d.setDate(d.getDate()-((d.getDay()+6)%7));return d.getTime()+12*3600e3;})();   // noon, this Monday
+      il.S.workouts=[];
+      ok('streak: nothing logged, no streak',il.weekStreak(now)===0);
+      il.S.workouts=[mkWorkout('x06',[[100,5]],mon-7*DAY),mkWorkout('x06',[[100,5]],mon-14*DAY)];
+      ok('streak: a week still in progress never breaks the run before it',il.weekStreak(now)===2,'got '+il.weekStreak(now));
+      il.S.workouts.push(mkWorkout('x06',[[100,5]],now));
+      ok('streak: …and counts as soon as you train in it',il.weekStreak(now)===3,'got '+il.weekStreak(now));
+      il.S.workouts=[mkWorkout('x06',[[100,5]],mon-14*DAY),mkWorkout('x06',[[100,5]],mon-21*DAY)];
+      ok('streak: a whole week missed ends it',il.weekStreak(now)===0,'got '+il.weekStreak(now));
+      il.S.workouts=[mkWorkout('x06',[[100,5]],now),mkWorkout('x06',[[100,5]],mon-7*DAY)];
+      il.switchTab('log');await sleep(40);
+      const chip=document.querySelector('#hacts .streak');
+      ok('streak: shown beside the cog on the Log tab from two weeks up',!!chip&&/2/.test(chip.textContent)&&!!chip.getAttribute('aria-label'),chip?chip.textContent:'no chip');
+
+      // (3) consistency: one square per day, Monday first, whatever the clocks did
+      il.S.workouts=[mkWorkout('x06',[[100,5],[100,5]],now),mkWorkout('x06',[[100,5]],mon-7*DAY)];
+      const hd=il.heatData(now),st0=new Date(hd.start);
+      ok('heat: the grid opens at midnight on a Monday',st0.getDay()===1&&st0.getHours()===0&&st0.getMinutes()===0,st0.toString());
+      ok('heat: today is the last square, shaded by its sets',hd.sets.length===il.HEAT_WEEKS*7&&hd.sets[hd.last]===2&&hd.n===2,
+        'today holds '+hd.sets[hd.last]);
+      ok('heat: last Monday’s session lands on last Monday',hd.sets[(il.HEAT_WEEKS-2)*7]===1);
+      // six months on, the grid spans a clock change: 24-hour steps back from
+      // midnight would open it at 23:00 or 01:00 and shift every square a day
+      const later=il.heatData(now+182*DAY),st1=new Date(later.start);
+      ok('heat: …and still does across a clock change',st1.getDay()===1&&st1.getHours()===0,st1.toString());
+      il.switchTab('history');await sleep(60);
+      const cells=document.querySelectorAll('#page-history .heat i');
+      ok('heat: History draws it — 18 weeks, today outlined',cells.length===il.HEAT_WEEKS*7&&document.querySelectorAll('#page-history .heat i.now').length===1
+        &&cells[hd.last].classList.contains('now')&&!cells[hd.last].classList.contains('l0'));
+
+      // (4) History search: filters by workout or exercise, keeps the keyboard up
+      il.S.workouts=[mkWorkout('x06',[[100,5]],now-DAY,'Push'),mkWorkout('x01',[[140,5]],now-2*DAY,'Legs')];
+      il.switchTab('history');await sleep(60);
+      const hs=document.querySelector('#page-history input[type=search]');
+      hs.focus();hs.value='squat';hs.dispatchEvent(new Event('input',{bubbles:true}));await sleep(40);
+      const hits=[...document.querySelectorAll('#page-history .hist-card')];
+      ok('search: an exercise name finds the workouts that contain it',hits.length===1&&/Legs/.test(hits[0].textContent),hits.length+' card(s)');
+      ok('search: the field survives the repaint, so typing is not interrupted',hs.isConnected&&document.activeElement===hs);
+      hs.value='zzz';hs.dispatchEvent(new Event('input',{bubbles:true}));await sleep(40);
+      ok('search: no match says so',!document.querySelector('#page-history .hist-card')&&/No workout matches/.test(document.querySelector('#page-history').textContent));
+      hs.blur();
+      il.switchTab('log');il.switchTab('history');await sleep(40);
+      ok('search: leaving the tab clears it',document.querySelector('#page-history input[type=search]').value===''&&document.querySelectorAll('#page-history .hist-card').length===2);
+      ok('search: muscle tags name what a session trained',il.workoutGroups(il.S.workouts[1]).join()==='Legs'&&il.workoutGroups(il.S.workouts[0]).join()==='Chest');
+
+      // (5) what a template costs
+      const tEst={id:'t59',name:'Est Day',pos:0,exs:[{exId:'x06',sets:4,reps:5},{exId:'x11',sets:3,reps:8}]};
+      il.S.templates=[tEst];il.S.workouts=[];
+      const coldSec=tEst.exs.reduce((n,te)=>{const x=il.S.ex.get(te.exId);return n+te.sets*((x.restSec!=null?x.restSec:il.S.set.restSec)+45);},0);
+      ok('estimate: a template never run is priced at its sets × your rest',il.tplEstMin(tEst)===Math.max(5,Math.round(coldSec/300)*5)&&il.tplSetCount(tEst)===7,
+        il.tplEstMin(tEst)+' min');
+      il.S.workouts=[30,40,50,95].map((m,i)=>{const w=mkWorkout('x06',[[100,5]],now-(i+1)*DAY,'Est Day');w.dur=m*60;return w;});
+      ok('estimate: …then at the average of its last three sessions',il.tplEstMin(tEst)===40&&il.tplLast(tEst)===il.S.workouts[0],il.tplEstMin(tEst)+' min');
+      const midn=new Date(now);midn.setHours(0,0,0,0);
+      il.S.set.sched={on:1,mode:'cycle',anchor:midn.getTime(),remind:0,at:'17:30',lastNotif:'',days:[{label:'Est Day',tplId:'t59'}]};
+      il.S.workouts.forEach(w=>{w.finishedAt-=DAY;});            // nothing trained today or yesterday
+      il.switchTab('log');await sleep(60);
+      const facts=[...document.querySelectorAll('#page-log .hero .mchip')].map(c=>c.textContent);
+      ok('today: the session shows its exercises, sets and time at a glance',facts.length===3&&/2 exercises/.test(facts[0])&&/7 sets/.test(facts[1])&&/~40 min/.test(facts[2]),facts.join(' | '));
+      const todayIdx=(new Date(now).getDay()+6)%7;
+      ok('week: days still to train are marked from the plan',document.querySelectorAll('#page-log .wk-day.plan').length===7-todayIdx
+        &&document.querySelectorAll('#page-log .wk-day.today').length===1,document.querySelectorAll('#page-log .wk-day.plan').length+' marked');
+      il.S.set.sched=null;il.S.templates=[];
+
+      // (6) the workout in progress
+      il.S.workouts=[mkWorkout('x06',[[100,5]],now-2*DAY)];
+      il.S.active={id:uid(),name:'v59',startedAt:now-600e3,notes:'',exs:[
+        {exId:'x06',notes:'',sets:[{t:'N',w:100,r:5,rpe:8,dur:null,dist:null,done:false},{t:'N',w:100,r:5,rpe:8,dur:null,dist:null,done:false}]}]};
+      il.S.prev={};il.S.records={};
+      il.switchTab('log');await sleep(80);
+      const bgOf=el=>getComputedStyle(el).backgroundColor;
+      const accRgb=(()=>{const d=document.createElement('div');d.style.color=tok('--acc');document.body.append(d);const c=getComputedStyle(d).color;d.remove();return c;})();
+      const types=()=>[...document.querySelectorAll('#exc0 .setrow .set-type')];
+      ok('workout: the next set to do wears the accent',bgOf(types()[0])===accRgb&&bgOf(types()[1])!==accRgb,bgOf(types()[0]));
+      document.querySelector('#exc0 .setrow .chk').click();await sleep(380);   // the colour cross-fades over 200 ms
+      ok('workout: …and it moves on when that set is ticked',bgOf(types()[0])!==accRgb&&bgOf(types()[1])===accRgb,bgOf(types()[1]));
+      // offsetHeight: the layout size, not the box mid-way through its entrance animation
+      const small=[...document.querySelectorAll('#exc0 .setrow .chk, #exc0 .setrow .set-in, #exc0 .setrow .set-type')]
+        .filter(el=>el.offsetHeight<44);
+      ok('workout: every control in a set row is at least 44 px tall',!small.length,small.map(e=>e.className+' '+e.offsetHeight).join(', '));
+      ok('workout: no streak chip while a session is open',!document.querySelector('#hacts .streak'));
+      const wIn=document.querySelector('#exc0 .setrow:nth-child(3) .set-in');
+      wIn.focus();await sleep(30);
+      ok('workout: focusing a filled field selects it, so typing replaces the number',wIn.value==='100'&&wIn.selectionStart===0&&wIn.selectionEnd===3,
+        wIn.selectionStart+'–'+wIn.selectionEnd);
+      wIn.blur();
+      // the rest timer: hidden, it lay across the tab bar's labels and ate their taps
+      document.querySelector('#rt-skip').click();await sleep(450);
+      const pill=document.getElementById('restpill');
+      const stolen=()=>[...document.querySelectorAll('nav button')].filter(b=>{
+        const r=b.getBoundingClientRect(),el=document.elementFromPoint(r.left+r.width/2,r.top+r.height*.85);
+        return !el||!b.contains(el);}).length;
+      ok('rest pill: hidden, taps reach every tab — label included',getComputedStyle(pill).pointerEvents==='none'&&stolen()===0,stolen()+' tab(s) covered');
+      pill.style.pointerEvents='auto';
+      const wouldSteal=stolen();
+      pill.style.pointerEvents='';
+      ok('rest pill: NEGATIVE CONTROL — as 5.8 had it, the invisible pill covers the tab labels',wouldSteal>0,wouldSteal+' of 5 tabs');
+      pill.classList.add('show');
+      ok('rest pill: showing, its buttons take taps',getComputedStyle(pill).pointerEvents==='auto');
+      pill.classList.remove('show');
+      // finishing names the records the session set
+      il.S.active.exs[0].sets[0].pr=1;
+      il.finishWorkout();await sleep(350);
+      const prl=document.querySelector('.overlay .pr-list');
+      ok('finish: the sheet names each record the session set',!!prl&&/Bench Press/.test(prl.textContent)&&/100 × 5/.test(prl.textContent)
+        &&!!document.querySelector('.overlay .fin-ring.gold'),prl?prl.textContent:'no list');
+      document.querySelectorAll('.overlay').forEach(o=>o.remove());il.SHEETS.length=0;
+      try{history.replaceState({ilSheet:0},'');}catch(e){}
+      il.S.active=null;await il.flushActive();
+
+      // (7) chrome
+      il.switchTab('progress');
+      ok('nav: the indicator slides to the open tab',getComputedStyle(document.querySelector('nav')).getPropertyValue('--nav-i').trim()==='3');
+      il.switchTab('log');
+      ok('nav: …and back',getComputedStyle(document.querySelector('nav')).getPropertyValue('--nav-i').trim()==='0'
+        &&document.getElementById('htitle').textContent==='IronLog');
+      il.settingsSheet();await sleep(350);
+      const sh9=topSheet().querySelector('.sheet'),hd9=sh9.querySelector('.sheet-head');
+      sh9.scrollTop=320;await sleep(60);
+      const gap=hd9.getBoundingClientRect().top-sh9.getBoundingClientRect().top;
+      ok('sheets: scrolled, the pinned title is flush with the top — nothing shows above it',sh9.scrollTop>0&&Math.abs(gap)<=1.5,gap.toFixed(1)+' px gap');
+      const sw=[...topSheet().querySelectorAll('.acc-sw')];
+      ok('settings: six accent swatches, one chosen, each named',sw.length===6&&sw.filter(b=>b.getAttribute('aria-checked')==='true').length===1
+        &&sw.every(b=>b.getAttribute('aria-label')));
+      sw[4].click();await sleep(40);
+      ok('settings: tapping a swatch applies and saves it',il.S.set.accent==='azure'&&document.body.getAttribute('data-acc')==='azure'
+        &&((await il.kvGet('settings'))||{}).accent==='azure');
+      il.S.set.accent='gold';await il.kvPut('settings',il.S.set);il.applyTheme();
+      document.querySelectorAll('.overlay').forEach(o=>o.remove());il.SHEETS.length=0;
+      try{history.replaceState({ilSheet:0},'');}catch(e){}
+      il.S.set.sched={on:1,mode:'cycle',anchor:midn.getTime(),remind:0,at:'17:30',lastNotif:'',days:[{label:'A'},{rest:1,label:'Rest'}]};
+      il.scheduleSheet();await sleep(350);
+      const tg=[...topSheet().querySelectorAll('.tgl')];
+      ok('a11y: the schedule’s switches are named switches',tg.length===2&&tg.every(t=>t.getAttribute('role')==='switch'&&t.getAttribute('aria-label')&&t.hasAttribute('aria-checked')));
+      document.querySelectorAll('.overlay').forEach(o=>o.remove());il.SHEETS.length=0;
+      try{history.replaceState({ilSheet:0},'');}catch(e){}
+      il.S.set.sched=null;
+      ok('motion: with reduced motion, looping animations run once instead of strobing',
+        [...document.styleSheets].some(ss=>{try{return [...ss.cssRules].some(r=>r.conditionText&&/prefers-reduced-motion/.test(r.conditionText)
+          &&/animation-iteration-count:\s*1\s*!important/.test(r.cssText));}catch(e){return false;}}));
+      il.S.workouts=[];
+    }
+
+    /* ---------- 38. stress test ---------- */
     const N=opts.stress===false?0:400;
     if(N){
       const ids=[...il.S.ex.values()].filter(x=>!x.cardio).slice(0,12).map(x=>x.id);

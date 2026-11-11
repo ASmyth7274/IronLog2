@@ -1,9 +1,33 @@
 # IronLog2
 My workout tracker with templates and lots of features - All Rights Reserved, not for commercial use or duplication of any kind
 
-## Version 5.8
+## Version 5.9
 
 **What's new**
+- **A new look, built on 5.8's layout.** Cards, controls and sheets now sit on three levels, each lit by a fine edge along its top. A faint glow of your accent sits behind the header. The tab bar floats over the page as glass, and its highlight slides between tabs. The main action on each screen is filled with the accent.
+- **Pick your accent.** **Settings → Appearance → Accent** offers gold, ember, rose, violet, azure and teal. Buttons, charts and highlights all follow it, in the black theme and the white one. Every accent is checked for contrast on both.
+- **Today shows what the session costs.** The Today card lists the session's exercises, sets and likely length. The length is the average of the last three times you ran that template. Once you've trained, it shows what you did instead.
+- **The week strip knows your plan.** Each day shows its date. Days you've trained are filled, and days still planned carry a dot. The card counts sessions done against sessions planned.
+- **Your streak.** Weeks in a row with at least one workout show beside the cog on the Log tab. The week you're in counts as soon as you train, and doesn't break the run before it ends.
+- **History has a consistency grid and a search.** The grid has one square per day for the last 18 weeks, shaded by how much you did. Search finds workouts by name, by exercise or by a word in the notes. Each workout card shows its date and the muscle groups it trained.
+- **Progress reads at a glance.** A line across the top totals your workouts, hours, volume and records. The exercise chart leads with the current figure and how far it has moved over the range. Touch anywhere on a chart to read a value. Records sit side by side. The strength score has a ring and tells you how many points remain to the next level.
+- **Body leads with the count.** The recovery card opens with how many muscles are fresh, recovering and fatigued. Measurements show the change since your first entry, and each entry shows its change from the one before.
+- **A workout that's easier to drive.** Every control in a set row is now 44 px tall. The next set to do is marked in the accent, so you can find your place without reading. Tapping a field that already holds a number selects it, so typing replaces it. A finished exercise is edged in green. The rest timer fills as the rest runs out.
+- **Finishing names your records.** The Finish sheet lists each record the session set, by exercise, before you save.
+- **A wider screen gets a column.** On a tablet or a desktop the app keeps a readable width and sheets open as centred panels.
+- **Menus and pickers follow the theme.** Date and time pickers and drop-down lists now use the app's black or white theme.
+
+**Fixed**
+- **Taps on the tab bar's labels.** With no rest running, the hidden rest timer lay invisibly across the lower third of the tab bar and swallowed taps that landed on a tab's label. It no longer takes taps while hidden.
+- **Sheets no longer show a strip of content above their title** while you scroll them.
+- **Reduced motion.** With the system setting on, looping animations now run once and stop.
+
+## Updating from 5.8
+There's nothing to do. 5.9 stores everything exactly as 5.8 does: the same database version, the same stores and the same backup format. It adds one optional setting, your accent. 5.8 ignores it, so you can go back at any time and backup files move freely between the two.
+
+## Version 5.8
+
+**What was new**
 - **A cleaner, calmer design.** Each screen has one clear main action. Menus are grouped, with anything destructive set apart at the end, and one icon family is used throughout. During a workout, a bar stays pinned at the top with the clock, sets done and Finish. Explanations fold away until you want them. The light theme's switches now read correctly when on.
 - **Today** on the Log tab. Start today's scheduled template in one tap, see this week at a glance, and pick any template. The exercise picker opens on your most recently trained exercises.
 - **Edit a finished workout** from History: a mistyped weight, a forgotten Finish, the start time or a note. Records and trophies are recalculated from that workout onwards. Earlier sessions are never touched.
@@ -46,18 +70,18 @@ Technogym doesn't publish leverage figures for its machines. The presets use the
 For the exact figure on your gym's machine, open it in the plotter and use **Measure it**. In one slow rep, measure how far your hands move and how far the weight rises.
 
 ## Publishing (GitHub Pages)
-Pages serves whichever branch is chosen in **Settings → Pages** on GitHub. To publish 5.8:
+Pages serves whichever branch is chosen in **Settings → Pages** on GitHub. To publish a version:
 1. Under **Build and deployment**, choose **Deploy from a branch**.
-2. Pick `5.8` and `/ (root)`, then save.
+2. Pick the branch that holds the version you want and `/ (root)`, then save.
 
-Switching back to `5.7` is just as safe (see *Updating from 5.7*).
+Switching back to `5.8` or `5.7` is just as safe (see *Updating from 5.8* and *Updating from 5.7*).
 
 ### Getting the update onto your phone
 Pages takes a minute or two to publish. After that, the installed app picks up the new version the next time it starts with a connection.
 
 5.7 can't tell you an update is waiting. If it's still showing 5.7, close IronLog fully (swipe it away in the app switcher) and open it again. **Settings → About** shows the version you're running.
 
-From 5.8 on, the app checks by itself and offers **Update** on the Log tab.
+From 5.8 on, the app checks by itself and offers **Update** on the Log tab. A phone on 5.8 will offer 5.9 this way once it is published.
 
 ## Tests
 Every push runs the full suite in headless Chromium (**Actions → tests**), in London, Los Angeles and Auckland time.

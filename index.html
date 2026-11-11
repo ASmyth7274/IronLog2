@@ -871,7 +871,6 @@ body.light .ex-pr.beat .ic{color:#6B5210}
 .upd{display:flex;align-items:center;gap:10px;margin:0 0 12px;padding:12px 14px;border-radius:16px;
   background:var(--card);border:1px solid var(--line)}
 .upd .grow{min-width:0}
-/*v59>*/
 /* ==========================================================================
    v5.9: DEPTH, LIGHT AND COLOUR
    5.8 gave the app its hierarchy. 5.9 gives it a material: surfaces sit on
@@ -888,7 +887,6 @@ body.light .ex-pr.beat .ic{color:#6B5210}
   --bg:#09090B; --bgtop:#101013; --card:#141417; --card2:#1E1E23; --line:#27272D;
   --text:#F6F4EF; --dim:#9B9B95;
   --acc:#D4B06A; --acc-hi:#EDD6A3; --acc-lo:#B08A45; --acc-rgb:212,176,106; --acc-ink:#1B1505;
-  --acc-dim:rgba(var(--acc-rgb),.15); --tint:rgba(var(--acc-rgb),.12); --tint-2:rgba(var(--acc-rgb),.22);
   --chrome:#F4F1EA; --chrome-text:#151518;
   --navbg:rgba(24,24,28,.74); --navfg:#8E8E96; --navon:#FFFFFF;
   --hdr:rgba(16,16,19,.80); --glass:rgba(24,24,28,.78);
@@ -896,7 +894,7 @@ body.light .ex-pr.beat .ic{color:#6B5210}
   --well:#1B1B20; --grp-well:#131316; --rigbg:#0D0D10;
   --shadow:0 16px 36px -16px rgba(0,0,0,.65);
   --lift:0 22px 50px -18px rgba(0,0,0,.8);
-  --data1:var(--acc); --data1-fill:rgba(var(--acc-rgb),.16); --data2:#8DB4F2;
+  --data2:#8DB4F2;
   --ease:cubic-bezier(.22,.68,.32,1); --spring:cubic-bezier(.2,.9,.3,1.25);
   --nav-h:64px;
 }
@@ -913,6 +911,12 @@ body.light{
   --lift:0 22px 50px -20px rgba(60,50,30,.38);
   --data2:#2F63B8;
 }
+/* Everything derived from the accent is declared on body, the element the
+   accent itself is set on: a custom property that references another is
+   resolved where it is declared, so on :root these would stay gold whatever
+   accent body carried. */
+body,body.light{--acc-dim:rgba(var(--acc-rgb),.15);--tint:rgba(var(--acc-rgb),.12);--tint-2:rgba(var(--acc-rgb),.22);
+  --data1:var(--acc);--data1-fill:rgba(var(--acc-rgb),.16)}
 /* accents — a dark value for black, a light value for paper */
 body[data-acc=ember]{--acc:#FF8A4C;--acc-hi:#FFB489;--acc-lo:#E0672A;--acc-rgb:255,138,76;--acc-ink:#2A1004}
 body[data-acc=rose]{--acc:#FF7096;--acc-hi:#FFA3BB;--acc-lo:#E04C76;--acc-rgb:255,112,150;--acc-ink:#2B0612}
@@ -1421,7 +1425,53 @@ body.light .acc-sw{color:#fff}
 /* quote: the mark sits above the line, not behind it */
 .qmark{position:static;display:block;height:34px;line-height:1;font-size:64px;opacity:.9;margin:-6px 0 4px -2px}
 body.light .qmark{opacity:.9}
-/*<v59*/
+
+/* ---------- polish ---------- */
+/* a scrolled sheet used to show a 7 px strip of its content above the pinned
+   title: sticky honours the scroller's padding, so the padding moved to the
+   grabber and the title pins flush with the sheet's top edge */
+.sheet{padding-top:0}
+.grabber{margin:10px auto 8px}
+.sheet-head{top:0}
+.btn.primary.off{background:var(--card2);color:var(--dim);box-shadow:inset 0 1px 0 var(--hair)}
+.sched-now .mech-tag{color:var(--acc);background:var(--tint)}
+.lrow.sched-now .sched-num{color:var(--acc-ink)}
+.sched-num{border-radius:11px;width:40px;height:34px;font-family:var(--rnd);font-size:12px}
+.sp-cell{border-radius:14px;padding:9px 6px;background:rgba(127,127,135,.1)}
+.fin-ring.gold{color:#2A1F00;background:linear-gradient(180deg,#FFE08A,#F2B93B);
+  box-shadow:0 0 0 8px rgba(255,207,77,.14),0 0 0 18px rgba(255,207,77,.06),0 18px 36px -12px rgba(255,207,77,.7)}
+.spark-box{position:relative;height:64px;margin:10px 6px 12px 2px}
+.spark-dot{position:absolute;width:9px;height:9px;margin:-4.5px 0 0 -4.5px;border-radius:50%;background:var(--data1);
+  box-shadow:0 0 0 3px var(--card),0 0 10px var(--data1)}
+.ws-rpe{font-size:12px;font-weight:700;color:var(--dim);flex:0 0 auto}
+body.light .addset-row .btn{box-shadow:inset 0 0 0 1.5px rgba(40,34,20,.13)}
+/* the loaded bar, large enough to read across a rack */
+.plates-viz{gap:4px;padding:22px 4px 6px;min-height:150px;border-radius:18px;background:rgba(127,127,135,.07);margin-bottom:10px}
+.bar-line{width:64px;height:10px;border-radius:5px 0 0 5px}
+.bar-collar{width:11px;height:22px;border-radius:4px}
+.plate{border-radius:6px;transform:scaleX(1.35);margin:0 3px;
+  box-shadow:inset 0 0 0 2px rgba(255,255,255,.16),inset 3px 0 0 rgba(255,255,255,.12),0 4px 12px rgba(0,0,0,.45)}
+.plbl{font-family:var(--rnd);font-size:10.5px}
+.mech-read>div{border-radius:14px;background:rgba(127,127,135,.1)}
+.tg-bar{border-radius:18px;background:rgba(127,127,135,.08)}
+.rig{border-radius:20px}
+details.info>summary{font-size:12.5px;padding:2px 8px 2px 0}
+/* native pickers, select lists and the keyboard's own chrome follow the theme */
+:root{color-scheme:dark}
+body.light{color-scheme:light}
+input[type=date].in::-webkit-calendar-picker-indicator,
+input[type=time].in::-webkit-calendar-picker-indicator,
+body.light input[type=date].in::-webkit-calendar-picker-indicator,
+body.light input[type=time].in::-webkit-calendar-picker-indicator{filter:none;opacity:.7}
+/* an exercise with every set ticked steps back, edged in green */
+#page-log .card:has(.ex-prog.done){border-color:rgba(47,214,113,.3)}
+body.light #page-log .card:has(.ex-prog.done){border-color:rgba(11,125,62,.3)}
+/* reduced motion: a looping animation cut to a millisecond would strobe, so
+   it also runs once and stops */
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{animation-iteration-count:1 !important}
+  .hero .btn.primary::after{display:none}
+}
 </style>
 </head>
 <body>
@@ -1520,7 +1570,7 @@ const BASE_MUSCLES=['Chest','Back','Shoulders','Biceps','Triceps','Forearms','Qu
 const MUSCLES=[...BASE_MUSCLES,'Front Delts','Side Delts','Rear Delts','Adductors','Abductors','Lower Back','Obliques'];
 const REGION={'Front Delts':'Shoulders','Side Delts':'Shoulders','Rear Delts':'Shoulders','Adductors':'Quads','Abductors':'Glutes','Lower Back':'Back','Obliques':'Abs'};
 const EQUIP=['Barbell','Dumbbell','Machine','Cable','Bodyweight','Kettlebell','Smith Machine','Band','Cardio','Other'];
-const APP_VER='5.8';   // shown in Settings — lets you check which build a device runs
+const APP_VER='5.9';   // shown in Settings — lets you check which build a device runs
 const DEF={unit:'kg',restSec:120,barWeight:20,plates:[25,20,15,10,5,2.5,1.25],sound:true,vibrate:true,notify:false,theme:'dark',name:'',strScale:1,coachOff:[],
   accent:'gold',       // v5.9: accent colour (see ACCENTS) — optional, so 5.8 reads a 5.9 save untouched
  
@@ -2774,8 +2824,9 @@ function pickExercises({multi=true,title='Add exercises',onDone,allowCreate=true
   const used=lastUsedMap();
   let grp=used.size?'recent':'all';
   const list=h('div');
-  const addBtn=multi?h('button',{class:'btn primary mt12',onclick:()=>{if(sel.size){close();onDone([...sel]);}}},'Add (0)'):null;
-  const updateAdd=()=>{if(addBtn){addBtn.textContent=sel.size?'Add '+sel.size+' exercise'+(sel.size>1?'s':''):'Add (0)';addBtn.style.opacity=sel.size?'1':'.5';}};
+  const addBtn=multi?h('button',{class:'btn primary mt12',onclick:()=>{if(sel.size){close();onDone([...sel]);}}},'Select exercises'):null;
+  const updateAdd=()=>{if(addBtn){addBtn.textContent=sel.size?'Add '+sel.size+' exercise'+(sel.size>1?'s':''):'Select exercises';
+    addBtn.classList.toggle('off',!sel.size);addBtn.setAttribute('aria-disabled',String(!sel.size));}};
   const chips=h('div',{class:'chips pk-chips'});
   function paintChips(){
     chips.replaceChildren(...PICK_GROUPS.filter(([g])=>g!=='recent'||used.size).map(([g,l])=>
@@ -3876,6 +3927,12 @@ function setRow(i,j){
     html:'<svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>'});
   in1.setAttribute('enterkeyhint','next');
   in2.setAttribute('enterkeyhint','done');
+  // v5.9: a field that already holds a number is selected on focus, so the
+  // next keystroke replaces it — correcting 110 to 112.5 no longer starts
+  // with three backspaces. Deferred a tick: iOS places its caret after focus.
+  for(const el of[in1,in2,pIn])el.addEventListener('focus',()=>{
+    if(el.value)setTimeout(()=>{try{if(document.activeElement===el)el.select();}catch(e){}},0);
+  });
   in1.setAttribute('aria-label',cd?'Minutes':'Weight');
   in2.setAttribute('aria-label',cd?'Distance':'Reps');
   pIn.setAttribute('aria-label','RPE');
@@ -4110,10 +4167,16 @@ function exMenu(i){
    ago" meant abandoning the session for the Progress tab. */
 function sparkEl(vals){
   const W=100,H=32,lo=Math.min(...vals),span=(Math.max(...vals)-lo)||1;
-  const pts=vals.map((v,i)=>(vals.length>1?i/(vals.length-1)*W:W/2).toFixed(2)+','+(H-3-(v-lo)/span*(H-6)).toFixed(2)).join(' ');
+  const xy=vals.map((v,i)=>[vals.length>1?i/(vals.length-1)*W:W/2,H-4-(v-lo)/span*(H-8)]);
+  const pts=xy.map(p=>p[0].toFixed(2)+','+p[1].toFixed(2)).join(' ');
+  const end=xy[xy.length-1];
   const el=h('div',{class:'spark-box'});
-  el.innerHTML='<svg viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" aria-hidden="true"><polyline points="'+pts
-    +'" fill="none" stroke="var(--data1)" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/></svg>';
+  // the dot is an HTML element: inside a stretched SVG it would be an ellipse
+  el.innerHTML='<svg viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" aria-hidden="true">'
+    +'<defs><linearGradient id="spk" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--data1)" stop-opacity=".32"/><stop offset="1" stop-color="var(--data1)" stop-opacity="0"/></linearGradient></defs>'
+    +'<polygon points="0,'+H+' '+pts+' '+W+','+H+'" fill="url(#spk)"/>'
+    +'<polyline points="'+pts+'" fill="none" stroke="var(--data1)" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/></svg>';
+  el.append(h('i',{class:'spark-dot',style:'left:'+end[0].toFixed(2)+'%;top:'+(end[1]/H*100).toFixed(2)+'%'}));
   return el;
 }
 function exHistorySheet(exId){
@@ -4371,7 +4434,7 @@ async function finishWorkout(at){
   }
   const close=sheet('Finish workout',h('div',{},
     h('div',{class:'fin-hero'},
-      h('div',{class:'fin-ring'},ic(prs?'trophy':'check')),
+      h('div',{class:'fin-ring'+(prs?' gold':'')},ic(prs?'trophy':'check')),
       h('div',{class:'fin-t'},prs?(prs===1?'A new record':prs+' new records'):'Session complete'),
       h('div',{class:'fin-s'},fmtDate(end)+' · '+fmtTime(a.startedAt)+' – '+fmtTime(end))),
     h('div',{class:'statgrid'},
@@ -4419,6 +4482,7 @@ async function finishWorkout(at){
     S.active=null;S.prev={};S.records={};
     skipRest();await flushActive();
     close();renderLog();
+    haptic([30,50,30]);
     toast('Workout saved 💪'+(volPRs.length?' · session volume PR: '+volPRs.join(', '):''),{dur:3500});
     // started from a template and changed its structure → offer to sync the
     // template; otherwise (ad-hoc workout) offer to save it as a new one
@@ -4738,7 +4802,11 @@ let histQ='';       // the search box: workout names, exercise names, notes
 const HEAT_WEEKS=18;
 function heatData(now){
   const d0=midnight(now),todayIdx=(new Date(d0).getDay()+6)%7;
-  const start=d0-(todayIdx+(HEAT_WEEKS-1)*7)*864e5;      // the Monday the grid opens on
+  // the Monday the grid opens on — stepped back by calendar days, not by
+  // multiples of 24 h: across a clock change those land an hour off midnight,
+  // on the wrong side of it half the year
+  const s0=new Date(d0);s0.setDate(s0.getDate()-(todayIdx+(HEAT_WEEKS-1)*7));
+  const start=s0.getTime();
   const sets=new Array(HEAT_WEEKS*7).fill(0);
   let n=0,first=null;
   for(const w of S.workouts){
@@ -4757,8 +4825,8 @@ function consistencyCard(){
   const months=h('div',{class:'heat-mo'});
   let lastMo=-1;
   for(let c=0;c<HEAT_WEEKS;c++){
-    const mo=new Date(hd.start+c*7*864e5+432e5).getMonth();
-    months.append(h('span',{},mo!==lastMo&&c<HEAT_WEEKS-1?new Date(hd.start+c*7*864e5+432e5).toLocaleDateString(undefined,{month:'short'}):''));
+    const colDay=new Date(hd.start+c*7*864e5+432e5),mo=colDay.getMonth();   // noon: clear of any clock change
+    months.append(h('span',{},mo!==lastMo&&c<HEAT_WEEKS-1?colDay.toLocaleDateString(undefined,{month:'short'}):''));
     lastMo=mo;
     for(let r=0;r<7;r++){
       const di=c*7+r,v=hd.sets[di];
@@ -4909,7 +4977,8 @@ function workoutSheet(w){
       const label=st.t==='W'?'W':(st.t==='N'?String(n):st.t);
       blk.append(h('div',{class:'ws-set'+(st.pr?' pr':'')},
         h('span',{class:'set-type t'+(st.t||'N')},label),
-        h('span',{class:'num grow'},setLine(st)),
+        h('span',{class:'num grow'},setLine({...st,rpe:null})),
+        st.rpe!=null?h('span',{class:'ws-rpe num'},'RPE '+st.rpe):null,
         st.pr?h('span',{class:'pr-pill'},ic('trophy','sm'),'PR'):null));
     }
     c.append(blk);
@@ -6415,7 +6484,7 @@ function scheduleSheet(){
             d.tplId=d.tplId===t.id?null:t.id;
             if(d.tplId){d.rest=0;delete d.rest;if(!nameIn.value.trim())nameIn.value=t.name;}
             paint();
-          }},d.tplId===t.id?'Linked ✓':'Link')))
+          }},d.tplId===t.id?[ic('check','sm'),'Linked']:'Link')))
           :[h('p',{class:'small dim',style:'padding:6px 2px'},'No templates yet — build one on the Templates tab and link it here.')]));
     };
     paint();
@@ -6435,10 +6504,10 @@ function scheduleSheet(){
       h('div',{class:'row mt8',style:'gap:8px'},
         i>0?h('button',{class:'btn sm',onclick:async()=>{
           [s.days[i-1],s.days[i]]=[s.days[i],s.days[i-1]];await commit();close2();render();
-        }},'↑ Move up'):null,
+        }},ic('up','sm'),'Move up'):null,
         i<s.days.length-1?h('button',{class:'btn sm',onclick:async()=>{
           [s.days[i+1],s.days[i]]=[s.days[i],s.days[i+1]];await commit();close2();render();
-        }},'↓ Move down'):null),
+        }},ic('down','sm'),'Move down'):null),
       s.mode==='cycle'&&s.days.length>1?h('button',{class:'btn danger mt8',onclick:async()=>{
         s.days.splice(i,1);await commit();close2();render();renderLog();
       }},'Delete day'):null));
@@ -6457,8 +6526,8 @@ function scheduleSheet(){
       return;
     }
     // on/off
-    const onT=h('button',{class:'tgl'+(s.on?' on':''),onclick:async()=>{
-      s.on=s.on?0:1;onT.classList.toggle('on',!!s.on);await commit();renderLog();
+    const onT=h('button',{class:'tgl'+(s.on?' on':''),role:'switch','aria-checked':String(!!s.on),'aria-label':'Schedule on',onclick:async()=>{
+      s.on=s.on?0:1;onT.classList.toggle('on',!!s.on);onT.setAttribute('aria-checked',String(!!s.on));await commit();renderLog();
     }});
     body.append(h('div',{class:'lrow'},h('div',{class:'grow bold'},'Schedule on'),onT));
     body.append(h('span',{class:'lbl'},'Type'),
@@ -6486,11 +6555,11 @@ function scheduleSheet(){
           h('div',{class:'tiny dim'},d.rest?'Recovery'
             :(d.tplId?(S.templates.find(t=>t.id===d.tplId)||{name:'Template deleted — tap to relink'}).name:'No template linked'))),
         isToday?h('span',{class:'mech-tag'},'TODAY'):null,
-        h('span',{class:'dim'},'›')));
+        h('span',{class:'dim'},ic('chev','sm'))));
     });
     if(s.mode==='cycle')body.append(h('button',{class:'btn sm mt8',onclick:async()=>{
       s.days.push({label:'Training',tplId:null});await commit();render();
-    }},'+ Add day to cycle'));
+    }},ic('plus','sm'),'Add day to cycle'));
     // anchor
     if(s.mode==='cycle'){
       body.append(h('span',{class:'lbl'},'Day 1 of the cycle fell on'),
@@ -6506,7 +6575,7 @@ function scheduleSheet(){
           'Shift this to re-sync the rotation if you skip or add a session.'));
     }
     // reminder
-    const rt=h('button',{class:'tgl'+(s.remind?' on':''),onclick:async()=>{
+    const rt=h('button',{class:'tgl'+(s.remind?' on':''),role:'switch','aria-checked':String(!!s.remind),'aria-label':'Remind me on training days',onclick:async()=>{
       if(!s.remind){
         const ns=notifSupport();
         if(!ns.ok){toast(ns.why);return;}
@@ -6515,7 +6584,7 @@ function scheduleSheet(){
         if(perm!=='granted'){toast(perm==='denied'?'Blocked — allow notifications in browser settings':'Permission not granted');return;}
         s.remind=1;
       }else s.remind=0;
-      rt.classList.toggle('on',!!s.remind);
+      rt.classList.toggle('on',!!s.remind);rt.setAttribute('aria-checked',String(!!s.remind));
       await commit();
     }});
     body.append(h('span',{class:'lbl'},'Reminder'),
@@ -6800,7 +6869,9 @@ async function boot(){
     // v5.8 additions: fair strength score, kg ⇄ lb, history, forgotten Finish, updates
     bwShare,STR_REP_CAP,unitConvert,convertUnits,unitSwitchSheet,exHistorySheet,exMenu,
     staleInfo,staleCard,showStale,finishWorkout,STALE_MS,
-    UPD,newerVer,checkForUpdate,updateCard,showUpdate,fmtW,prChipEl};
+    UPD,newerVer,checkForUpdate,updateCard,showUpdate,fmtW,prChipEl,
+    // v5.9: accents, streak, consistency, estimates
+    ACCENTS,weekStreak,heatData,HEAT_WEEKS,tplEstMin,tplLast,tplSetCount,workoutGroups,histMatch,renderHeaderActs,ringEl};
   switchTab('log');
   applyLaunchIntent();
   // a launch that fell back to the cached copy (no signal) still hears of an update
