@@ -20,9 +20,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      # Pinned so a new Playwright can't change the suite unannounced. The pin
+      # has to know the runner's OS, though: 1.56.1 refused to install on the
+      # Ubuntu 26.04 that ubuntu-latest became, and the run failed before a
+      # single check ran. 1.63.0 supports 20.04 through 26.04.
       - name: Install Playwright and Chromium
         run: |
-          npm install --no-save --no-package-lock playwright@1.56.1
+          npm install --no-save --no-package-lock playwright@1.63.0
           npx playwright install --with-deps chromium
       - name: Run the suite
         run: node ci/run-tests.mjs --tz=${{ matrix.tz }}
